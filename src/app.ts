@@ -1,8 +1,13 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express, { type Express, type Request, type Response } from 'express';
 import { selectMessages } from './selection.js';
 import { resolveTopic, toMessages } from './taxonomy.js';
 import type { MessageSource } from './types.js';
+
+/** Repo root, whether running from src/ under tsx or dist/ after a build. */
+const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
 export const DEFAULT_LIMIT = 5;
 export const MAX_LIMIT = 25;
@@ -21,6 +26,9 @@ export function createApp(source: MessageSource): Express {
   const app = express();
   app.use(cors());
   app.disable('x-powered-by');
+
+  // Demo page for the CTA, served from the API so it can call it same-origin.
+  app.use(express.static(PUBLIC_DIR));
 
   /**
    * The CTA on a card-sending page: hand over the card's category and

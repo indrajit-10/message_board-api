@@ -21,9 +21,30 @@ npm run dev     # http://localhost:3000
 npm test
 ```
 
+Open <http://localhost:3000> for the demo page, or call it directly:
+
 ```bash
 curl "http://localhost:3000/v1/messages?category=birthday&subcategory=friends"
 ```
+
+## Demo page
+
+`http://localhost:3000` is a stand-in for a card-sending page: a message box
+with the CTA wired up, so you can see the feature rather than read about it.
+Pick a card with the preset chips or type any category, press **Get Messages**,
+and click a suggestion to drop it into the box.
+
+It is built to show the two behaviours that are easy to miss from the JSON:
+
+- The **quinceanera / cousin** preset is a category with no messages. Note that
+  the button still returns something usable and the panel says so, rather than
+  erroring.
+- **Show me 5 more** sends `exclude`, so a second press never repeats what is
+  already on screen.
+
+The page also prints the exact request it made, which makes it a quick way to
+check a category before wiring anything up. It is served by the API itself
+(`public/index.html`, static, no build step) so it can call it same-origin.
 
 ## The contract
 
@@ -152,6 +173,8 @@ means editing `serves` patterns, not shipping a release.
 ## Layout
 
 ```
+public/
+  index.html         demo page for the CTA
 src/
   app.ts             routes + validation
   taxonomy.ts        slug normalisation, fallback chain, stable message ids

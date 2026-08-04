@@ -154,4 +154,11 @@ describe('supporting endpoints', () => {
     const res = await fetch(`${base}/v1/nope`);
     assert.equal(res.status, 404);
   });
+
+  it('serves the CTA demo page at the root', async () => {
+    const res = await fetch(`${base}/`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(await res.text(), /Get Messages/);
+  });
 });
