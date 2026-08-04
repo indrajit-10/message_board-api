@@ -1,0 +1,134 @@
+{
+  "generated_at": "2026-08-04T00:00:00Z",
+  "note": "Stage 0 fixtures. Original placeholder copy so the CTA can be built end to end before ingest exists. Stage 1 replaces these with real messages and their per-post source_url.",
+  "topics": [
+    {
+      "id": "birthday-friends",
+      "label": "Birthday wishes for friends",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["birthday/friends", "birthday/best_friend", "birthday/friendship"],
+      "messages": [
+        "Happy birthday to the friend who makes ordinary days worth remembering. Here's to another year of us.",
+        "Another trip around the sun, and I'm still lucky to have you along for it. Happy birthday!",
+        "Wishing you a day as warm and generous as you have always been to me. Happy birthday, my friend.",
+        "Happy birthday! Thanks for the laughs, the long talks, and for putting up with me. Have the best one.",
+        "To my favourite partner in mischief, may this year bring you everything you have been quietly hoping for.",
+        "Happy birthday, friend. However you celebrate today, I hope it feels exactly right.",
+        "Some friends you keep, and some friends keep you. Thanks for being the second kind. Happy birthday!",
+        "Cheers to you today! May your year ahead be full of good news and even better company."
+      ]
+    },
+    {
+      "id": "birthday-general",
+      "label": "Birthday wishes",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["birthday/*"],
+      "messages": [
+        "Wishing you a very happy birthday and a year filled with good health, good people and good news.",
+        "Happy birthday! May today be gentle, joyful, and entirely about you.",
+        "Sending you the warmest birthday wishes and a hope that this year treats you kindly.",
+        "Happy birthday! Here's to celebrating you today and everything you will do in the year ahead.",
+        "May your birthday be the start of a year that surprises you in all the best ways.",
+        "Have a wonderful birthday. You deserve a day that feels as good as you make others feel.",
+        "Happy birthday! Take the day, enjoy every bit of it, and let someone else do the dishes.",
+        "Many happy returns of the day. Wishing you joy now and all year through."
+      ]
+    },
+    {
+      "id": "anniversary",
+      "label": "Anniversary wishes",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["anniversary/*", "wedding/anniversary"],
+      "messages": [
+        "Happy anniversary! Here's to the years behind you and all the ones still to come.",
+        "Congratulations on another year together. May your love keep growing quieter, deeper and stronger.",
+        "Happy anniversary to two people who make it look easy. Wishing you many more.",
+        "Celebrating you both today: your patience, your laughter, and the life you have built together.",
+        "Happy anniversary! May this year bring you as much happiness as you have given each other.",
+        "To a wonderful couple on a wonderful day: happy anniversary, with love.",
+        "Another year, another reason to celebrate the two of you. Happy anniversary!",
+        "Wishing you a lovely anniversary and a year full of the small moments that matter most."
+      ]
+    },
+    {
+      "id": "thank-you",
+      "label": "Thank you messages",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["thank_you/*", "thanks/*"],
+      "messages": [
+        "Thank you so much. Your kindness made more of a difference than you know.",
+        "I am truly grateful for your help. Thank you for showing up when it mattered.",
+        "Thank you for your thoughtfulness. It brightened my whole week.",
+        "Just a note to say thank you. I really appreciate everything you did.",
+        "Words don't quite cover it, but thank you, sincerely.",
+        "Thank you for your generosity and your time. Both mean a great deal to me.",
+        "I can't thank you enough. You made something hard feel a lot easier.",
+        "With heartfelt thanks for your kindness and your support."
+      ]
+    },
+    {
+      "id": "get-well",
+      "label": "Get well soon messages",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["get_well/*", "get_well_soon/*"],
+      "messages": [
+        "Wishing you a smooth and speedy recovery. Take all the time you need.",
+        "Thinking of you and hoping each day feels a little better than the last.",
+        "Get well soon! Rest up, everything else can wait.",
+        "Sending warm wishes your way for a quick return to full strength.",
+        "Hope you are back on your feet soon. Until then, be kind to yourself.",
+        "Feel better soon. You are missed, and you are in my thoughts.",
+        "Wishing you comfort, rest and a healthy recovery.",
+        "Here's to brighter, healthier days ahead. Get well soon!"
+      ]
+    },
+    {
+      "id": "congratulations",
+      "label": "Congratulations messages",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["congratulations/*", "congrats/*"],
+      "messages": [
+        "Congratulations! You worked for this, and it shows.",
+        "So happy for you. This is wonderful news. Congratulations!",
+        "Congratulations on your success. Enjoy this one, you have earned it.",
+        "Well done! Wishing you even more good news in the days ahead.",
+        "Congratulations! Watching you get here has been a pleasure.",
+        "Huge congratulations. Here's to whatever comes next.",
+        "What an achievement. Congratulations, and enjoy every minute.",
+        "Cheers to you and this brilliant news. Congratulations!"
+      ]
+    },
+    {
+      "id": "love",
+      "label": "Love and romance messages",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["love/*", "romance/*"],
+      "messages": [
+        "You make ordinary days feel like something worth keeping. I love you.",
+        "Still you. Always you. I love you more than I can fit in a card.",
+        "Thank you for being my favourite person. I love you.",
+        "Every day with you is my favourite day. All my love.",
+        "I love you for the big things, and for all the small ones too.",
+        "You have my whole heart, today and always.",
+        "Loving you is the easiest thing I do. Always yours.",
+        "Here's to us. I love you, now and for a long time yet."
+      ]
+    },
+    {
+      "id": "everyday",
+      "label": "Messages for any card",
+      "source_url": "https://blog.123greetings.com/what-to-write-in-a-card/",
+      "serves": ["*"],
+      "messages": [
+        "Thinking of you today and sending my very best wishes.",
+        "Just a little note to let you know you are on my mind.",
+        "Wishing you all the best, today and always.",
+        "Sending warm wishes your way. Hope this finds you well.",
+        "Here's to a wonderful day and an even better year ahead.",
+        "With very best wishes and a great deal of warmth.",
+        "Hope your day is a good one. You deserve it.",
+        "Sending you happiness, health and a little extra luck."
+      ]
+    }
+  ]
+}
