@@ -60,9 +60,10 @@ export function messageId(topicId: string, text: string): string {
 }
 
 export function toMessages(topic: Topic): Message[] {
-  return topic.messages.map((text) => ({
-    id: messageId(topic.id, text),
-    text,
-    source_url: topic.source_url,
-  }));
+  return topic.messages.map((entry) => {
+    const text = typeof entry === 'string' ? entry : entry.text;
+    const source =
+      typeof entry === 'string' ? topic.source_url : (entry.source_url ?? topic.source_url);
+    return { id: messageId(topic.id, text), text, source_url: source };
+  });
 }

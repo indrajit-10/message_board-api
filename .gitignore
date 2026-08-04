@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Written by `npm run ingest` — regenerate rather than commit.
+data/
 *.log
 .env
 .env.local

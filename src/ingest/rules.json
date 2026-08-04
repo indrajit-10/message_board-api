@@ -1,0 +1,166 @@
+{
+  "note": "Maps blog posts onto card categories. First matching rule wins, so specific rules come before general ones. `all` keywords must every one appear in the post's slug/title/categories; `any` needs at least one. Adding coverage means editing this file, not the code.",
+  "rules": [
+    {
+      "id": "birthday-friends",
+      "label": "Birthday wishes for friends",
+      "serves": ["birthday/friends", "birthday/best_friend", "birthday/friendship"],
+      "all": ["birthday"],
+      "any": ["friend", "bestie", "buddy", "pal"]
+    },
+    {
+      "id": "birthday-partner",
+      "label": "Birthday wishes for your partner",
+      "serves": ["birthday/wife", "birthday/husband", "birthday/girlfriend", "birthday/boyfriend"],
+      "all": ["birthday"],
+      "any": ["wife", "husband", "girlfriend", "boyfriend", "partner", "spouse"]
+    },
+    {
+      "id": "birthday-family",
+      "label": "Birthday wishes for family",
+      "serves": ["birthday/mom", "birthday/dad", "birthday/sister", "birthday/brother", "birthday/family", "birthday/daughter", "birthday/son"],
+      "all": ["birthday"],
+      "any": ["mom", "mother", "dad", "father", "sister", "brother", "son", "daughter", "parent", "grandma", "grandpa", "aunt", "uncle", "family"]
+    },
+    {
+      "id": "birthday-work",
+      "label": "Birthday wishes for colleagues",
+      "serves": ["birthday/boss", "birthday/colleague", "birthday/coworker"],
+      "all": ["birthday"],
+      "any": ["boss", "colleague", "coworker", "co-worker", "employee", "team"]
+    },
+    {
+      "id": "birthday-general",
+      "label": "Birthday wishes",
+      "serves": ["birthday/*"],
+      "all": ["birthday"],
+      "any": []
+    },
+    {
+      "id": "anniversary",
+      "label": "Anniversary wishes",
+      "serves": ["anniversary/*", "wedding/anniversary"],
+      "all": [],
+      "any": ["anniversary"]
+    },
+    {
+      "id": "wedding",
+      "label": "Wedding wishes",
+      "serves": ["wedding/*", "marriage/*"],
+      "all": [],
+      "any": ["wedding", "marriage", "newlywed", "bride", "groom"]
+    },
+    {
+      "id": "thank-you",
+      "label": "Thank you messages",
+      "serves": ["thank_you/*", "thanks/*"],
+      "all": [],
+      "any": ["thank you", "thank-you", "thankyou", "gratitude", "appreciation"]
+    },
+    {
+      "id": "get-well",
+      "label": "Get well soon messages",
+      "serves": ["get_well/*", "get_well_soon/*"],
+      "all": [],
+      "any": ["get well", "feel better", "recovery", "recover soon"]
+    },
+    {
+      "id": "sympathy",
+      "label": "Sympathy messages",
+      "serves": ["sympathy/*", "condolence/*"],
+      "all": [],
+      "any": ["sympathy", "condolence", "bereavement", "funeral", "grief", "passing"]
+    },
+    {
+      "id": "congratulations",
+      "label": "Congratulations messages",
+      "serves": ["congratulations/*", "congrats/*"],
+      "all": [],
+      "any": ["congratulation", "congrats", "promotion", "new job", "achievement", "well done"]
+    },
+    {
+      "id": "graduation",
+      "label": "Graduation messages",
+      "serves": ["graduation/*"],
+      "all": [],
+      "any": ["graduation", "graduate", "convocation"]
+    },
+    {
+      "id": "new-baby",
+      "label": "New baby messages",
+      "serves": ["new_baby/*", "baby/*"],
+      "all": [],
+      "any": ["new baby", "newborn", "baby shower", "christening", "new arrival"]
+    },
+    {
+      "id": "love",
+      "label": "Love and romance messages",
+      "serves": ["love/*", "romance/*", "valentines_day/*"],
+      "all": [],
+      "any": ["love", "romance", "romantic", "valentine"]
+    },
+    {
+      "id": "friendship",
+      "label": "Friendship messages",
+      "serves": ["friendship/*"],
+      "all": [],
+      "any": ["friendship", "friends day"]
+    },
+    {
+      "id": "good-luck",
+      "label": "Good luck messages",
+      "serves": ["good_luck/*"],
+      "all": [],
+      "any": ["good luck", "best of luck", "all the best"]
+    },
+    {
+      "id": "retirement",
+      "label": "Retirement messages",
+      "serves": ["retirement/*"],
+      "all": [],
+      "any": ["retirement", "retiring", "retire"]
+    },
+    {
+      "id": "christmas",
+      "label": "Christmas messages",
+      "serves": ["christmas/*"],
+      "all": [],
+      "any": ["christmas", "xmas", "yuletide"]
+    },
+    {
+      "id": "new-year",
+      "label": "New Year messages",
+      "serves": ["new_year/*"],
+      "all": [],
+      "any": ["new year"]
+    },
+    {
+      "id": "mothers-day",
+      "label": "Mother's Day messages",
+      "serves": ["mothers_day/*"],
+      "all": [],
+      "any": ["mother's day", "mothers day"]
+    },
+    {
+      "id": "fathers-day",
+      "label": "Father's Day messages",
+      "serves": ["fathers_day/*"],
+      "all": [],
+      "any": ["father's day", "fathers day"]
+    },
+    {
+      "id": "easter",
+      "label": "Easter messages",
+      "serves": ["easter/*"],
+      "all": [],
+      "any": ["easter"]
+    },
+    {
+      "id": "thanksgiving",
+      "label": "Thanksgiving messages",
+      "serves": ["thanksgiving/*"],
+      "all": [],
+      "any": ["thanksgiving"]
+    }
+  ]
+}

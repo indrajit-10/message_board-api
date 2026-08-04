@@ -8,10 +8,9 @@ hunts for something, copies it, comes back and pastes. This API removes that
 round trip: the message box's CTA sends the card's category and subcategory and
 gets back 5 messages the user can insert with one tap.
 
-**Status: Stage 0.** The contract is real and final; the messages come from a
-checked-in fixture file rather than the blog. That is deliberate — clients can
-integrate against the finished contract now, and swapping in real ingest later
-changes nothing they can see. See [Stage 1](#stage-1--real-messages).
+Messages come from the blog via [`npm run ingest`](#getting-real-messages). Until
+that has been run, the API serves a small set of checked-in fixtures instead, so
+a fresh checkout still boots and the CTA still answers.
 
 ## Quick start
 
@@ -134,41 +133,114 @@ async function getMessages({ category, subcategory }) {
 Render `data.messages`; on tap, insert `message.text` into the message box.
 Label the list from `data.resolved.label`.
 
-## Stage 1 — real messages
-
-Everything above stays as it is. Only the source changes.
-
-```
-client ──▶ this API ──▶ store ◀── ingest job (scheduled) ◀── blog
-```
-
-Ingest on a schedule, not per request. A CTA that scrapes live is slow enough to
-feel broken, breaks whenever the blog does, and turns every user into traffic on
-the blog. Serving from a local store is a few milliseconds and stays up
-regardless.
-
-To add it, implement `MessageSource` (`src/types.ts`), register it in
-`src/sources/index.ts`, and set `MESSAGE_SOURCE`. Routes, selection, resolution
-and every client are untouched.
-
-**First, find out how much parsing is actually needed.** If the blog is
-WordPress, most of it may be free:
+## Getting real messages
 
 ```bash
-curl -s https://blog.123greetings.com/robots.txt
-curl -s "https://blog.123greetings.com/wp-json/wp/v2/posts?per_page=1"
-curl -s "https://blog.123greetings.com/wp-json/wp/v2/categories?per_page=100"
-curl -s https://blog.123greetings.com/feed/
+npm run probe                  # what does the blog expose?
+npm run ingest -- --dry-run    # what would be extracted, without writing
+npm run ingest                 # write data/topics.json
 ```
 
-A working `wp-json` turns a brittle HTML scraper into a clean JSON read with
-real category ids. Either way the ingest job's job is the same: pull each post
-under *What to Write in a Card*, split it into individual messages, map it onto
-the card categories it serves, and write it out in the shape of
-`src/sources/fixtures/topics.json`.
+Restart the API and it serves the store automatically — `/v1/health` will say
+`"source": "store"` with the ingest timestamp.
 
-The mapping from card taxonomy to topics is data, not code — extending coverage
-means editing `serves` patterns, not shipping a release.
+Ingest runs on a schedule, never per request. A CTA that scrapes live is slow
+enough to feel broken, breaks whenever the blog does, and turns every card
+sender into traffic on the blog. Reading a local store is a few milliseconds and
+stays up regardless.
+
+```
+client ──▶ this API ──▶ data/topics.json ◀── npm run ingest ◀── blog
+```
+
+### Start with the probe
+
+`npm run probe` reports what the host actually serves — `robots.txt`, whether
+`wp-json` and the feed respond, every blog category with post counts, and the
+tag structure of a sample post. Run it before the first ingest, and again if
+extraction quality drops: a theme change shows up here first.
+
+Ingest prefers `wp-json` and falls back to the feed. The feed carries only the
+most recent posts, so a much smaller haul is expected there — the summary prints
+which transport ran.
+
+### Flags
+
+| Flag | Effect |
+|---|---|
+| `--dry-run` | Report what would be extracted, write nothing |
+| `--verbose` | Also print a sample of the kept messages |
+| `--category <slug>` | Restrict to one blog category, e.g. `what-to-write-in-a-card` |
+| `--limit <n>` | Stop after n posts |
+| `--base <url>` | Point at a different host |
+| `--out <path>` | Write somewhere other than `data/topics.json` |
+
+### Reading the summary
+
+```
+transport   wp-json
+posts       6
+markup      list=3  paragraph=1  blockquote=1  linebreak=1
+extracted   16 messages
+kept        13 after dedupe
+
+Topics (5):
+      8  everyday             *
+      6  birthday-friends     birthday/friends birthday/best_friend
+      3  thank-you            thank_you/* thanks/*
+
+1 post had messages but no card mapping:
+  ten-tips-for-picking-a-card
+  Add rules to src/ingest/rules.json to bring these in.
+```
+
+Three lines are worth acting on:
+
+- **`markup`** — which HTML shape each post used. Posts do not agree on how to
+  mark up a list of wishes, so every strategy runs and the one yielding the most
+  usable messages wins. A sudden shift toward `none` means the theme changed.
+- **posts that yielded no messages** — either not message posts, or markup
+  `extract.ts` does not read yet.
+- **posts with no card mapping** — real messages that no card category claims.
+  This is the list that tells you which rules to write next.
+
+Nothing is dropped silently; anything skipped is named.
+
+### Extending coverage
+
+`src/ingest/rules.json` maps posts onto card categories. First matching rule
+wins, so specific rules come before general ones. `all` keywords must every one
+appear in the post's slug, title or blog categories; `any` needs at least one.
+
+```json
+{
+  "id": "birthday-friends",
+  "label": "Birthday wishes for friends",
+  "serves": ["birthday/friends", "birthday/best_friend"],
+  "all": ["birthday"],
+  "any": ["friend", "bestie"]
+}
+```
+
+Widening coverage is a data edit, not a release.
+
+If extraction picks up junk or misses real messages, the filters are in
+`src/ingest/extract.ts` — `BOILERPLATE` for navigation and calls to action,
+`rejectReason` for length, links, headings and enumeration.
+
+### Sources
+
+| `MESSAGE_SOURCE` | Behaviour |
+|---|---|
+| `auto` (default) | Ingested store if `data/topics.json` exists, else fixtures |
+| `store` | Ingested store only; fails to boot if it is missing |
+| `fixture` | Checked-in fixtures only |
+
+`data/` is gitignored — regenerate it, do not commit it.
+
+If ingest produces no topic serving `*`, the fixture fallback is kept and the
+run says so. Without a global fallback the API cannot answer for an uncovered
+card, which is precisely the case the CTA exists to handle.
 
 ## Layout
 
@@ -181,11 +253,20 @@ src/
   selection.ts       random pick, exclude, wrap-around
   types.ts           Message, Topic, MessageSource
   sources/
-    fixture.ts       Stage 0 source
-    fixtures/        the messages
+    fixture.ts       checked-in fallback messages
+    store.ts         ingested messages
+    fixtures/        the fallback messages
+  ingest/
+    probe.ts         what does the blog expose?
+    fetchPosts.ts    wp-json, falling back to the feed
+    extract.ts       post HTML -> individual messages
+    mapping.ts       post -> card categories
+    rules.json       the mapping, as data
+    run.ts           the ingest CLI
   api.test.ts
+  ingest/ingest.test.ts
 ```
 
-Fixture copy is original placeholder text, not blog content, and every entry
-points at the section root. Stage 1 replaces both with real messages and their
-per-post URLs.
+Fixture copy is original placeholder text, not blog content. It exists so the
+API answers before the first ingest, and as the global fallback if ingest does
+not produce one.

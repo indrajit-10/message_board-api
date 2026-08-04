@@ -22,6 +22,13 @@ export interface Message {
 export type MatchKind = 'exact' | 'category' | 'generic';
 
 /**
+ * A message as stored. Ingest merges several blog posts into one topic, so a
+ * message can carry the post it came from; fixtures write a bare string and
+ * inherit the topic's `source_url`.
+ */
+export type TopicMessage = string | { text: string; source_url?: string };
+
+/**
  * A pool of messages for one subject, plus the card taxonomy it covers.
  *
  * `serves` holds match patterns, most specific first:
@@ -32,9 +39,10 @@ export type MatchKind = 'exact' | 'category' | 'generic';
 export interface Topic {
   id: string;
   label: string;
+  /** Attribution for messages that do not carry their own. */
   source_url: string;
   serves: string[];
-  messages: string[];
+  messages: TopicMessage[];
 }
 
 export interface Resolution {

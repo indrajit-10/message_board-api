@@ -10,12 +10,15 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "prebuild": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "tsc && node -e \"require('fs').cpSync('src/sources/fixtures','dist/sources/fixtures',{recursive:true})\"",
+    "build": "tsc && node -e \"require('fs').cpSync('src','dist',{recursive:true,filter:(s)=>!s.endsWith('.ts')})\"",
     "start": "node dist/index.js",
+    "probe": "tsx src/ingest/probe.ts",
+    "ingest": "tsx src/ingest/run.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "express": "^4.21.2"
   },

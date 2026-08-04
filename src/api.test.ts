@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { createApp } from './app.js';
-import { FixtureSource } from './sources/index.js';
+import { FixtureSource, StoreSource } from './sources/index.js';
 
 let server: Server;
 let base: string;
@@ -160,5 +163,93 @@ describe('supporting endpoints', () => {
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type') ?? '', /text\/html/);
     assert.match(await res.text(), /Get Messages/);
+  });
+});
+
+/**
+ * Ingested messages have to travel the same path fixtures do. This builds a
+ * store file by hand — the shape `npm run ingest` writes — and serves it, so a
+ * change to the contract cannot quietly break real messages while fixtures
+ * keep passing.
+ */
+describe('serving an ingested store', () => {
+  let storeServer: Server;
+  let storeBase: string;
+
+  before(async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mba-store-'));
+    const path = join(dir, 'topics.json');
+    await writeFile(
+      path,
+      JSON.stringify({
+        generated_at: '2026-08-04T09:00:00Z',
+        source: 'https://blog.example.com',
+        transport: 'wp-json',
+        topics: [
+          {
+            id: 'birthday-friends',
+            label: 'Birthday wishes for friends',
+            source_url: 'https://blog.example.com/a/',
+            serves: ['birthday/friends'],
+            messages: [
+              { text: 'Happy birthday to the friend who always makes me laugh.', source_url: 'https://blog.example.com/a/' },
+              { text: 'Wishing you a day as wonderful as you are.', source_url: 'https://blog.example.com/b/' },
+            ],
+          },
+          {
+            id: 'everyday',
+            label: 'Messages for any card',
+            source_url: 'https://blog.example.com/c/',
+            serves: ['*'],
+            messages: ['Thinking of you today and sending my very best wishes.'],
+          },
+        ],
+      }),
+    );
+
+    const source = new StoreSource(path);
+    await source.load();
+    storeServer = createApp(source).listen(0);
+    await new Promise((resolve) => storeServer.once('listening', resolve));
+    storeBase = `http://127.0.0.1:${(storeServer.address() as AddressInfo).port}`;
+  });
+
+  after(() => storeServer.close());
+
+  it('serves ingested messages', async () => {
+    const res = await fetch(`${storeBase}/v1/messages?category=birthday&subcategory=friends`);
+    const body = (await res.json()) as MessagesBody;
+    assert.equal(body.resolved.match, 'exact');
+    assert.equal(body.count, 2);
+  });
+
+  it('attributes each message to the post it came from', async () => {
+    const res = await fetch(
+      `${storeBase}/v1/messages?category=birthday&subcategory=friends&limit=25`,
+    );
+    const body = (await res.json()) as MessagesBody;
+    const urls = new Set(body.messages.map((m) => m.source_url));
+    assert.equal(urls.size, 2, 'per-message source_url should survive to the client');
+  });
+
+  it('still falls back for an uncovered card', async () => {
+    const res = await fetch(`${storeBase}/v1/messages?category=quinceanera`);
+    const body = (await res.json()) as MessagesBody;
+    assert.equal(res.status, 200);
+    assert.equal(body.resolved.match, 'generic');
+  });
+
+  it('reports the ingest timestamp in health', async () => {
+    const res = await fetch(`${storeBase}/v1/health`);
+    const body = (await res.json()) as { source: string; last_updated: string };
+    assert.equal(body.source, 'store');
+    assert.equal(body.last_updated, '2026-08-04T09:00:00Z');
+  });
+
+  it('refuses an empty store rather than serving nothing', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mba-empty-'));
+    const path = join(dir, 'topics.json');
+    await writeFile(path, JSON.stringify({ generated_at: 'x', topics: [] }));
+    await assert.rejects(() => new StoreSource(path).load(), /no topics/);
   });
 });
