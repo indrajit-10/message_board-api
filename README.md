@@ -200,11 +200,16 @@ client ──▶ this API ──▶ data/topics.json ◀── npm run ingest �
 
 ### What gets crawled
 
-By default ingest walks `/what-to-write-in-a-card/` and **everything beneath
-it** — `/birthday/`, `/birthday/for-mom/`, `/anniversary/` and so on — following
-links rather than asking an API. Whether those pages are WordPress posts, pages
-or hand-built HTML is not knowable from outside, and the posts API only ever
-sees one of the three.
+By default ingest takes `/what-to-write-in-a-card/` and **everything beneath
+it** — `/birthday/`, `/birthday/for-mom/`, `/anniversary/` and so on. Whether
+those pages are WordPress posts, pages or hand-built HTML is not knowable from
+outside, and the posts API only ever sees one of the three, so it reads the
+pages themselves.
+
+It finds them two ways at once. The sitemap (`/wp-sitemap.xml`, `/sitemap.xml`,
+or whatever `robots.txt` points at) is the site's own list of everything it
+has, including pages nothing links to. Following links then catches anything
+the sitemap left out. Either alone misses pages; together they do not.
 
 Crawling stays inside the section: another host, a path above the section, and
 assets are all skipped, and `/birthday` and `/birthday/` are the same page.
@@ -326,6 +331,7 @@ src/
   ingest/
     probe.ts         what does the blog expose?
     crawl.ts         walks the section URL tree
+    sitemap.ts       finds pages the navigation does not link to
     fetchPosts.ts    wp-json, falling back to the feed
     extract.ts       post HTML -> individual messages
     mapping.ts       post -> card categories

@@ -1,6 +1,7 @@
 import { crawlSection } from '../ingest/crawl.js';
 import { DEFAULT_BASE } from '../ingest/http.js';
 import { loadRules } from '../ingest/mapping.js';
+import { discoverFromSitemap } from '../ingest/sitemap.js';
 import { buildTopics, DEFAULT_SECTION, ensureFallback } from '../ingest/run.js';
 import type { MessageSource, Topic } from '../types.js';
 import { FixtureSource } from './fixture.js';
@@ -69,7 +70,8 @@ export class LiveSource implements MessageSource {
 
     try {
       log(`Reading ${base}${section} …`);
-      const pages = await crawlSection({ base, section, onProgress: log });
+      const seeds = await discoverFromSitemap(base, section, log);
+      const pages = await crawlSection({ base, section, seeds, onProgress: log });
       const rules = await loadRules();
       const { topics, kept } = buildTopics(pages, rules);
       await ensureFallback(topics);

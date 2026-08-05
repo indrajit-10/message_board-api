@@ -8,10 +8,12 @@ export interface CrawlOptions {
   maxPages?: number;
   maxDepth?: number;
   delayMs?: number;
+  /** Extra starting points, e.g. everything the sitemap lists. */
+  seeds?: string[];
   onProgress?: (message: string) => void;
 }
 
-const DEFAULTS = { maxPages: 600, maxDepth: 4, delayMs: 250 };
+const DEFAULTS = { maxPages: 2000, maxDepth: 8, delayMs: 250 };
 
 /** Assets and feeds that are never a page of card messages. */
 const NOT_A_PAGE = /\.(?:jpe?g|png|gif|svg|webp|ico|css|js|pdf|zip|xml|rss)(?:$|\?)/i;
@@ -95,6 +97,16 @@ export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
 
   const seen = new Set<string>([start]);
   const queue: Array<{ url: string; depth: number }> = [{ url: start, depth: 0 }];
+
+  // Seeds go in at depth 0 so their own links are followed too — a sitemap
+  // can list a section index without listing everything beneath it.
+  for (const seed of options.seeds ?? []) {
+    const url = normaliseUrl(seed, base);
+    if (!url || seen.has(url) || !isUnderSection(url, base, section)) continue;
+    seen.add(url);
+    queue.push({ url, depth: 0 });
+  }
+
   const pages: RawPost[] = [];
   let fetched = 0;
   let failed = 0;

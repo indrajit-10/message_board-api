@@ -8,6 +8,7 @@ import { fetchPosts, type RawPost } from './fetchPosts.js';
 import { DEFAULT_BASE } from './http.js';
 import { isMain } from './isMain.js';
 import { loadRules, matchRule, type Rule } from './mapping.js';
+import { discoverFromSitemap } from './sitemap.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_OUT = join(ROOT, 'data', 'topics.json');
@@ -210,9 +211,11 @@ async function collect(args: Args): Promise<{ posts: RawPost[]; transport: strin
     });
   }
 
+  const seeds = await discoverFromSitemap(args.base, args.section, onProgress);
   const pages = await crawlSection({
     base: args.base,
     section: args.section,
+    seeds,
     ...(args.limit === undefined ? {} : { maxPages: args.limit }),
     onProgress,
   });
