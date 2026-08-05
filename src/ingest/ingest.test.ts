@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
+import { isUnderSection, normaliseUrl, sectionSegments } from './crawl.js';
 import { extractMessages } from './extract.js';
 import { isMain } from './isMain.js';
 import type { RawPost } from './fetchPosts.js';
@@ -143,6 +144,133 @@ describe('extractMessages', () => {
     const { messages, pattern } = extractMessages('<p>Short.</p><h2>A heading</h2>');
     assert.equal(messages.length, 0);
     assert.equal(pattern, 'none');
+  });
+});
+
+/**
+ * A crawled page is the whole document, not a post body. The nav alone holds
+ * more <li> than the message list does, so without narrowing to the content
+ * region the menu would win the strategy scoring and become "the messages".
+ */
+const FULL_PAGE = `
+<html><body>
+  <header class="site-header"><h1>123Greetings Blog</h1></header>
+  <nav class="navbar"><ul>
+    <li><a href="/what-to-write-in-a-card/birthday/">Birthday</a></li>
+    <li><a href="/what-to-write-in-a-card/anniversary/">Anniversary</a></li>
+    <li><a href="/what-to-write-in-a-card/wedding/">Wedding</a></li>
+    <li><a href="/what-to-write-in-a-card/thank-you/">Thank You</a></li>
+    <li><a href="/what-to-write-in-a-card/get-well/">Get Well Soon</a></li>
+    <li><a href="/what-to-write-in-a-card/sympathy/">Sympathy</a></li>
+    <li><a href="/what-to-write-in-a-card/love/">Love and Romance</a></li>
+    <li><a href="/what-to-write-in-a-card/congratulations/">Congratulations</a></li>
+  </ul></nav>
+  <div class="breadcrumbs"><a href="/">Home</a> » <a href="/what-to-write-in-a-card/">Cards</a></div>
+  <article><div class="entry-content">
+    <h2>Birthday Messages for Mom</h2>
+    <p>Not sure what to write? Try one of these:</p>
+    <ul>
+      <li>Happy birthday, Mom. Thank you for everything you have done for me.</li>
+      <li>To the best mother in the world, have the most wonderful day today.</li>
+      <li>Mom, you deserve every good thing this year has coming. Happy birthday.</li>
+    </ul>
+  </div></article>
+  <aside class="sidebar"><ul>
+    <li><a href="/what-to-write-in-a-card/birthday/">Popular: birthday messages for everyone</a></li>
+    <li><a href="/what-to-write-in-a-card/love/">Popular: romantic messages for partners</a></li>
+  </ul></aside>
+  <footer class="site-footer"><ul>
+    <li>Copyright 123Greetings, all rights reserved worldwide</li>
+    <li>Privacy policy and terms of use for this website</li>
+  </ul></footer>
+</body></html>`;
+
+describe('reading a crawled page', () => {
+  it('takes the article and ignores nav, sidebar and footer', () => {
+    const { messages, pattern } = extractMessages(FULL_PAGE);
+    assert.equal(pattern, 'list');
+    assert.equal(messages.length, 3, `got: ${JSON.stringify(messages)}`);
+    for (const m of messages) assert.match(m, /mom|mother/i);
+  });
+
+  it('keeps navigation labels out of the messages', () => {
+    const { messages } = extractMessages(FULL_PAGE);
+    const joined = messages.join(' ').toLowerCase();
+    for (const label of ['anniversary', 'sympathy', 'congratulations', 'popular', 'copyright']) {
+      assert.ok(!joined.includes(label), `chrome leaked into messages: ${label}`);
+    }
+  });
+
+  it('still reads an API content fragment that has no article wrapper', () => {
+    const { messages } = extractMessages(AS_LIST);
+    assert.equal(messages.length, 3);
+  });
+
+  it('takes nothing from a section index, which is only links', () => {
+    const index = `
+      <article><div class="entry-content">
+        <h1>What to Write in a Card</h1>
+        <p>Browse by occasion:</p>
+        <ul>
+          <li><a href="/what-to-write-in-a-card/anniversary/">Anniversary messages</a></li>
+          <li><a href="/what-to-write-in-a-card/get-well/">Get well soon messages</a></li>
+          <li><a href="/what-to-write-in-a-card/congratulations/">Congratulations messages</a></li>
+        </ul>
+      </div></article>`;
+    const { messages } = extractMessages(index);
+    assert.deepEqual(messages, [], 'link labels are a table of contents, not messages');
+  });
+
+  it('keeps a message that merely contains a link', () => {
+    const html = `<ul><li>Happy birthday, <a href="/x/">my dearest friend</a>, have a wonderful day today.</li></ul>`;
+    const { messages } = extractMessages(html);
+    assert.equal(messages.length, 1);
+  });
+});
+
+describe('crawling a section', () => {
+  const BASE = 'https://blog.123greetings.com';
+  const SECTION = '/what-to-write-in-a-card/';
+
+  it('follows only what lives under the section', () => {
+    const under = (href: string) => isUnderSection(normaliseUrl(href, BASE)!, BASE, SECTION);
+    assert.equal(under('/what-to-write-in-a-card/birthday/'), true);
+    assert.equal(under('/what-to-write-in-a-card/birthday/for-mom/'), true);
+    assert.equal(under('https://blog.123greetings.com/what-to-write-in-a-card/love/'), true);
+
+    assert.equal(under('/everyday-messages/'), false, 'outside the section');
+    assert.equal(under('/'), false, 'the site root');
+    assert.equal(under('https://www.123greetings.com/what-to-write-in-a-card/'), false, 'another host');
+  });
+
+  it('skips assets that are not pages', () => {
+    for (const href of ['/what-to-write-in-a-card/cover.jpg', '/what-to-write-in-a-card/feed.xml']) {
+      assert.equal(isUnderSection(normaliseUrl(href, BASE)!, BASE, SECTION), false, href);
+    }
+  });
+
+  it('collapses the variants of one URL so a page is fetched once', () => {
+    const forms = [
+      '/what-to-write-in-a-card/birthday',
+      '/what-to-write-in-a-card/birthday/',
+      '/what-to-write-in-a-card/birthday/#wishes',
+      '/what-to-write-in-a-card/birthday/?utm_source=x',
+    ];
+    const canonical = new Set(forms.map((f) => normaliseUrl(f, BASE)));
+    assert.equal(canonical.size, 1, [...canonical].join(' | '));
+  });
+
+  it('reads the card subject from the path', () => {
+    const segs = (href: string) => sectionSegments(normaliseUrl(href, BASE)!, BASE, SECTION);
+    assert.deepEqual(segs('/what-to-write-in-a-card/birthday/'), ['birthday']);
+    assert.deepEqual(segs('/what-to-write-in-a-card/birthday/for-mom/'), ['birthday', 'for-mom']);
+    assert.deepEqual(segs('/what-to-write-in-a-card/'), []);
+  });
+
+  it('ignores links it cannot parse', () => {
+    for (const href of ['javascript:void(0)', 'mailto:hi@example.com', '']) {
+      assert.equal(normaliseUrl(href, BASE), null, href);
+    }
   });
 });
 

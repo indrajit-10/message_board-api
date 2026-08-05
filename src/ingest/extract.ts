@@ -86,34 +86,50 @@ export function rejectReason(text: string, opts: Required<ExtractOptions>): stri
   return null;
 }
 
+/**
+ * A list item that is just a link is a table of contents entry, not something
+ * anyone writes in a card. Section index pages are built entirely from these
+ * ("Anniversary messages", "Get well soon messages"), and they are long enough
+ * to clear the length filter, so they have to be recognised by shape instead.
+ */
+function isMostlyLink(node: cheerio.Cheerio<never>): boolean {
+  const text = node.text().replace(/\s+/g, ' ').trim();
+  if (!text) return true;
+  const linked = node.find('a').text().replace(/\s+/g, ' ').trim();
+  return linked.length >= text.length * 0.8;
+}
+
 interface Strategy {
   name: string;
-  collect: ($: cheerio.CheerioAPI) => string[];
+  collect: ($: cheerio.CheerioAPI, region: cheerio.Cheerio<never>) => string[];
 }
 
 const STRATEGIES: Strategy[] = [
   {
     name: 'list',
     // Skip list items that only wrap a nested list — their text is the children's.
-    collect: ($) =>
-      $('li')
+    collect: ($, region) =>
+      region
+        .find('li')
         .filter((_, el) => $(el).children('ul, ol').length === 0)
+        .filter((_, el) => !isMostlyLink($(el) as unknown as cheerio.Cheerio<never>))
         .map((_, el) => $(el).text())
         .get(),
   },
   {
     name: 'blockquote',
-    collect: ($) =>
-      $('blockquote')
+    collect: ($, region) =>
+      region
+        .find('blockquote')
         .map((_, el) => $(el).text())
         .get(),
   },
   {
     name: 'linebreak',
     // One paragraph holding several messages separated by <br>.
-    collect: ($) => {
+    collect: ($, region) => {
       const out: string[] = [];
-      $('p').each((_, el) => {
+      region.find('p').each((_, el) => {
         const html = $(el).html() ?? '';
         const parts = html.split(/<br\s*\/?>/i);
         if (parts.length < 2) return;
@@ -124,19 +140,57 @@ const STRATEGIES: Strategy[] = [
   },
   {
     name: 'paragraph',
-    collect: ($) =>
-      $('p')
+    collect: ($, region) =>
+      region
+        .find('p')
+        .filter((_, el) => !isMostlyLink($(el) as unknown as cheerio.Cheerio<never>))
         .map((_, el) => $(el).text())
         .get(),
   },
 ];
 
+/** Page furniture that holds <li> and <p> but never a card message. */
+const CHROME =
+  'script, style, noscript, iframe, form, figure, figcaption, ' +
+  'nav, header, footer, aside, ' +
+  '.nav, .navbar, .menu, .navigation, .sidebar, .widget, .breadcrumb, .breadcrumbs, ' +
+  '.comments, #comments, .comment-list, .pagination, .pager, ' +
+  '.sharedaddy, .share, .social, .related, .related-posts, .tags, .meta, .site-header, .site-footer';
+
+/**
+ * Where the messages live on a page.
+ *
+ * A crawled page is the whole document — a nav menu alone can contribute
+ * thirty <li> items, which would out-vote the real list and win the strategy
+ * scoring outright. Narrowing first is what makes crawling a full page as
+ * reliable as reading a post body from the API. When nothing matches (an API
+ * content fragment has no <article>), <body> is already the content.
+ */
+const CONTENT_REGIONS = [
+  '.entry-content',
+  '.post-content',
+  '.article-content',
+  'article',
+  'main',
+  '#content',
+  '.content',
+];
+
+export function contentRegion($: cheerio.CheerioAPI): cheerio.Cheerio<never> {
+  $(CHROME).remove();
+  for (const selector of CONTENT_REGIONS) {
+    const found = $(selector).first();
+    if (found.length && found.text().trim().length > 200) {
+      return found as unknown as cheerio.Cheerio<never>;
+    }
+  }
+  return $('body') as unknown as cheerio.Cheerio<never>;
+}
+
 export function extractMessages(html: string, options: ExtractOptions = {}): ExtractResult {
   const opts = { ...DEFAULTS, ...options };
   const $ = cheerio.load(html);
-
-  // Strip anything that is chrome rather than content before looking at text.
-  $('script, style, noscript, iframe, figure, figcaption, .sharedaddy, .related').remove();
+  const region = contentRegion($);
 
   let best: ExtractResult = { messages: [], pattern: 'none', candidates: 0, rejected: {} };
 
@@ -144,7 +198,7 @@ export function extractMessages(html: string, options: ExtractOptions = {}): Ext
     const rejected: Record<string, number> = {};
     const seen = new Set<string>();
     const messages: string[] = [];
-    const raw = strategy.collect($);
+    const raw = strategy.collect($, region);
 
     for (const candidate of raw) {
       const text = clean(candidate);

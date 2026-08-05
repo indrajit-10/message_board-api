@@ -1,7 +1,8 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Topic } from '../types.js';
+import { crawlSection } from './crawl.js';
 import { extractMessages } from './extract.js';
 import { fetchPosts, type RawPost } from './fetchPosts.js';
 import { DEFAULT_BASE } from './http.js';
@@ -12,13 +13,19 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_OUT = join(ROOT, 'data', 'topics.json');
 const FIXTURES = join(ROOT, 'src', 'sources', 'fixtures', 'topics.json');
 
+/** Where the card messages live. Everything under it is fair game. */
+export const DEFAULT_SECTION = '/what-to-write-in-a-card/';
+
 interface Args {
   base: string;
   out: string;
+  section: string;
+  transport: 'crawl' | 'wp-json';
   limit?: number;
   categorySlug?: string;
   dryRun: boolean;
   verbose: boolean;
+  reset: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -27,13 +34,20 @@ function parseArgs(argv: string[]): Args {
     return i === -1 ? undefined : argv[i + 1];
   };
   const limit = value('--limit');
+  const transport = value('--transport') ?? 'crawl';
+  if (transport !== 'crawl' && transport !== 'wp-json') {
+    throw new Error(`--transport must be "crawl" or "wp-json", got "${transport}".`);
+  }
   return {
     base: value('--base') ?? DEFAULT_BASE,
     out: value('--out') ?? DEFAULT_OUT,
+    section: value('--section') ?? DEFAULT_SECTION,
+    transport,
     limit: limit ? Number(limit) : undefined,
     categorySlug: value('--category'),
     dryRun: argv.includes('--dry-run'),
     verbose: argv.includes('--verbose'),
+    reset: argv.includes('--reset'),
   };
 }
 
@@ -184,17 +198,43 @@ function report(summary: IngestSummary, args: Args): void {
   }
 }
 
+async function collect(args: Args): Promise<{ posts: RawPost[]; transport: string }> {
+  const onProgress = (m: string) => console.log(m);
+
+  if (args.transport === 'wp-json') {
+    return fetchPosts({
+      base: args.base,
+      ...(args.limit === undefined ? {} : { limit: args.limit }),
+      ...(args.categorySlug === undefined ? {} : { categorySlug: args.categorySlug }),
+      onProgress,
+    });
+  }
+
+  const pages = await crawlSection({
+    base: args.base,
+    section: args.section,
+    ...(args.limit === undefined ? {} : { maxPages: args.limit }),
+    onProgress,
+  });
+  return { posts: pages, transport: `crawl ${args.section}` };
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
-  console.log(`Ingesting from ${args.base}${args.categorySlug ? ` [${args.categorySlug}]` : ''}`);
+  if (args.reset) {
+    await rm(args.out, { force: true });
+    console.log(`Removed ${args.out}`);
+  }
+
+  console.log(
+    args.transport === 'crawl'
+      ? `Crawling ${args.base}${args.section} and everything under it`
+      : `Ingesting from ${args.base}${args.categorySlug ? ` [${args.categorySlug}]` : ''}`,
+  );
+
   const rules = await loadRules();
-  const { posts, transport } = await fetchPosts({
-    base: args.base,
-    ...(args.limit === undefined ? {} : { limit: args.limit }),
-    ...(args.categorySlug === undefined ? {} : { categorySlug: args.categorySlug }),
-    onProgress: (m) => console.log(m),
-  });
+  const { posts, transport } = await collect(args);
 
   const built = buildTopics(posts, rules);
   const seededFallback = await ensureFallback(built.topics);

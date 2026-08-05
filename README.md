@@ -160,9 +160,9 @@ Label the list from `data.resolved.label`.
 ## Getting real messages
 
 ```bash
-npm run probe                  # what does the blog expose?
-npm run ingest -- --dry-run    # what would be extracted, without writing
-npm run ingest                 # write data/topics.json
+npm run probe                          # what does the blog expose?
+npm run ingest -- --dry-run --verbose  # what would be extracted, without writing
+npm run ingest -- --reset              # wipe the store and rebuild it
 ```
 
 Restart the API and it serves the store automatically — `/v1/health` will say
@@ -177,6 +177,25 @@ stays up regardless.
 client ──▶ this API ──▶ data/topics.json ◀── npm run ingest ◀── blog
 ```
 
+### What gets crawled
+
+By default ingest walks `/what-to-write-in-a-card/` and **everything beneath
+it** — `/birthday/`, `/birthday/for-mom/`, `/anniversary/` and so on — following
+links rather than asking an API. Whether those pages are WordPress posts, pages
+or hand-built HTML is not knowable from outside, and the posts API only ever
+sees one of the three.
+
+Crawling stays inside the section: another host, a path above the section, and
+assets are all skipped, and `/birthday` and `/birthday/` are the same page.
+
+The path is also the taxonomy. `/what-to-write-in-a-card/birthday/for-mom/`
+carries the segments `birthday` and `for-mom`, which is what the mapping rules
+read — far steadier than guessing from a slug.
+
+`--transport wp-json` switches to the REST API instead, falling back to the
+feed. Use it if the section ever stops being crawlable; the summary always
+prints which transport ran.
+
 ### Start with the probe
 
 `npm run probe` reports what the host actually serves — `robots.txt`, whether
@@ -184,18 +203,17 @@ client ──▶ this API ──▶ data/topics.json ◀── npm run ingest �
 tag structure of a sample post. Run it before the first ingest, and again if
 extraction quality drops: a theme change shows up here first.
 
-Ingest prefers `wp-json` and falls back to the feed. The feed carries only the
-most recent posts, so a much smaller haul is expected there — the summary prints
-which transport ran.
-
 ### Flags
 
 | Flag | Effect |
 |---|---|
 | `--dry-run` | Report what would be extracted, write nothing |
 | `--verbose` | Also print a sample of the kept messages |
-| `--category <slug>` | Restrict to one blog category, e.g. `what-to-write-in-a-card` |
-| `--limit <n>` | Stop after n posts |
+| `--reset` | Delete the store first, so nothing from a previous run survives |
+| `--section <path>` | Crawl a different subtree, default `/what-to-write-in-a-card/` |
+| `--transport wp-json` | Use the REST API instead of crawling |
+| `--category <slug>` | With `--transport wp-json`, restrict to one blog category |
+| `--limit <n>` | Stop after n pages |
 | `--base <url>` | Point at a different host |
 | `--out <path>` | Write somewhere other than `data/topics.json` |
 
@@ -284,6 +302,7 @@ src/
     fixtures/        the fallback messages
   ingest/
     probe.ts         what does the blog expose?
+    crawl.ts         walks the section URL tree
     fetchPosts.ts    wp-json, falling back to the feed
     extract.ts       post HTML -> individual messages
     mapping.ts       post -> card categories
