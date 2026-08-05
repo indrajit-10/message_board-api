@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>API explorer — message-board-api</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f5f3; --panel: #ffffff; --ink: #1c1a17; --muted: #6d675e;
+    --line: #e2ded7; --accent: #b4552d; --accent-soft: #fdf1ea;
+    --ok: #2f6b4f; --ok-soft: #e8f3ed; --warn: #8a6320; --warn-soft: #fbf2e0;
+    --err: #a33a2a; --err-soft: #fbeae6;
+    --code-bg: #f1efec; --key: #7a3fa8; --str: #2f6b4f; --num: #b4552d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171614; --panel: #201e1b; --ink: #ece8e2; --muted: #9c958a;
+      --line: #34302b; --accent: #e08256; --accent-soft: #33241c;
+      --ok: #7fc4a1; --ok-soft: #1d2b24; --warn: #d9ad63; --warn-soft: #2d2519;
+      --err: #e08a76; --err-soft: #32211d;
+      --code-bg: #191715; --key: #c39ae0; --str: #8fcfae; --num: #e6a07a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 30px 20px 70px; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { margin-bottom: 20px; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+
+  .serving {
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; margin: 18px 0 26px; font-size: 13px;
+  }
+  .serving .k { color: var(--muted); }
+  .serving .v { font-weight: 600; }
+  .serving .tag {
+    font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+    background: var(--warn-soft); color: var(--warn); letter-spacing: .02em;
+  }
+  .serving .tag.live { background: var(--ok-soft); color: var(--ok); }
+
+  .ep {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 18px;
+  }
+  .ep h2 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 10px; }
+  .verb {
+    font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    background: var(--accent-soft); color: var(--accent);
+    padding: 3px 8px; border-radius: 5px;
+  }
+  .ep .summary { color: var(--muted); font-size: 13.5px; margin: 8px 0 16px; }
+
+  .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .params label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .params .req { color: var(--accent); }
+  .params input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 7px; background: var(--bg); color: var(--ink);
+    font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .params input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+  .chip {
+    font-size: 12px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+    font-family: inherit;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  .send {
+    margin-top: 16px; padding: 9px 18px; background: var(--accent); color: #fff;
+    border: 0; border-radius: 7px; font: 600 13px/1 inherit; cursor: pointer;
+  }
+  .send:hover { filter: brightness(1.07); }
+  .send:disabled { opacity: .55; cursor: default; filter: none; }
+
+  .result { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .result[hidden] { display: none; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 12px; margin-bottom: 10px; }
+  .status { font-weight: 700; padding: 3px 9px; border-radius: 999px; font-size: 11px; }
+  .status.s2 { background: var(--ok-soft); color: var(--ok); }
+  .status.s4 { background: var(--warn-soft); color: var(--warn); }
+  .status.s5, .status.s0 { background: var(--err-soft); color: var(--err); }
+  .meta .dim { color: var(--muted); }
+
+  .url {
+    display: block; font-size: 12px; background: var(--code-bg); color: var(--ink);
+    padding: 9px 11px; border-radius: 7px; margin-bottom: 8px; word-break: break-all;
+  }
+  .curlrow { display: flex; gap: 8px; align-items: stretch; margin-bottom: 10px; }
+  .curlrow .url { flex: 1; margin: 0; }
+  .copy {
+    padding: 0 12px; border: 1px solid var(--line); background: var(--bg);
+    color: var(--muted); border-radius: 7px; font: 12px inherit; cursor: pointer;
+  }
+  .copy:hover { border-color: var(--accent); color: var(--accent); }
+
+  pre.json {
+    margin: 0; background: var(--code-bg); padding: 12px 14px; border-radius: 8px;
+    font-size: 12.5px; line-height: 1.5; overflow-x: auto; max-height: 420px;
+  }
+  .jk { color: var(--key); }
+  .js { color: var(--str); }
+  .jn { color: var(--num); }
+  .jb { color: var(--accent); }
+
+  footer { margin-top: 30px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>API explorer</h1>
+    <p>Every endpoint, with its parameters, testable on its own. For the feature itself see the <a href="/">CTA demo</a>.</p>
+  </header>
+
+  <div class="serving" id="serving">
+    <span class="k">Checking what is being served…</span>
+  </div>
+
+  <div id="endpoints"></div>
+
+  <footer>
+    Responses come from this server, so whatever you see here is exactly what a client gets.
+  </footer>
+</div>
+
+<script>
+const ENDPOINTS = [
+  {
+    id: 'messages',
+    method: 'GET',
+    path: '/v1/messages',
+    summary: 'Messages for one card. This is what the "Get Messages" CTA calls. Never 404s on an unknown category — it falls back and reports how it matched.',
+    params: [
+      { name: 'category', value: 'birthday', required: true, hint: 'Card category slug' },
+      { name: 'subcategory', value: 'friends', hint: 'Card subcategory slug' },
+      { name: 'limit', value: '5', hint: '1–25, default 5' },
+      { name: 'exclude', value: '', hint: 'Comma-separated ids already shown' },
+    ],
+    presets: [
+      { label: 'exact match', values: { category: 'birthday', subcategory: 'friends', limit: '5', exclude: '' } },
+      { label: 'category fallback', values: { category: 'birthday', subcategory: 'colleague', limit: '5', exclude: '' } },
+      { label: 'generic fallback', values: { category: 'quinceanera', subcategory: 'cousin', limit: '5', exclude: '' } },
+      { label: 'all of one topic', values: { category: 'birthday', subcategory: 'friends', limit: '25', exclude: '' } },
+      { label: '400 · no category', values: { category: '', subcategory: '', limit: '', exclude: '' } },
+      { label: '400 · limit out of range', values: { category: 'birthday', subcategory: '', limit: '99', exclude: '' } },
+    ],
+  },
+  {
+    id: 'categories',
+    method: 'GET',
+    path: '/v1/categories',
+    summary: 'Coverage map: which card categories have dedicated messages and how many. Use it to decide where writing more messages pays off.',
+    params: [],
+    presets: [],
+  },
+  {
+    id: 'health',
+    method: 'GET',
+    path: '/v1/health',
+    summary: 'Which source is being served, how much is loaded, and when it was last ingested.',
+    params: [],
+    presets: [],
+  },
+];
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/**
+ * Minimal JSON colouring — keys, strings, numbers, literals.
+ *
+ * Matches against the escaped text, so the quote delimiter is &quot; rather
+ * than ". Escaping first is what keeps response bodies from injecting markup;
+ * a pattern written against " silently matches no string at all and starts
+ * colouring the digits inside URLs instead.
+ */
+const JSON_TOKEN =
+  /(&quot;(?:\\u[a-zA-Z0-9]{4}|\\[^u]|(?!&quot;).)*&quot;(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g;
+
+function highlight(json) {
+  return esc(json).replace(JSON_TOKEN, (m) => {
+    if (m.startsWith('&quot;')) {
+      return m.endsWith(':') ? `<span class="jk">${m}</span>` : `<span class="js">${m}</span>`;
+    }
+    if (/^(?:true|false|null)$/.test(m)) return `<span class="jb">${m}</span>`;
+    return `<span class="jn">${m}</span>`;
+  });
+}
+
+function card(ep) {
+  const el = document.createElement('section');
+  el.className = 'ep';
+  el.innerHTML = `
+    <h2><span class="verb">${ep.method}</span><code>${ep.path}</code></h2>
+    <p class="summary">${esc(ep.summary)}</p>
+    ${ep.params.length ? `<div class="params">${ep.params.map((p) => `
+      <div>
+        <label for="${ep.id}-${p.name}">${p.name}${p.required ? ' <span class="req">*</span>' : ''}</label>
+        <input id="${ep.id}-${p.name}" value="${esc(p.value)}" spellcheck="false" autocomplete="off" />
+        <div class="hint">${esc(p.hint ?? '')}</div>
+      </div>`).join('')}</div>` : ''}
+    ${ep.presets.length ? `<div class="presets">${ep.presets.map((p, i) =>
+      `<button class="chip" data-preset="${i}">${esc(p.label)}</button>`).join('')}</div>` : ''}
+    <button class="send">Send request</button>
+    <div class="result" hidden></div>`;
+
+  const inputs = Object.fromEntries(ep.params.map((p) => [p.name, el.querySelector(`#${ep.id}-${p.name}`)]));
+  const result = el.querySelector('.result');
+  const sendBtn = el.querySelector('.send');
+
+  for (const chip of el.querySelectorAll('.chip')) {
+    chip.addEventListener('click', () => {
+      const preset = ep.presets[Number(chip.dataset.preset)];
+      for (const [k, v] of Object.entries(preset.values)) if (inputs[k]) inputs[k].value = v;
+      send();
+    });
+  }
+  sendBtn.addEventListener('click', send);
+
+  function buildUrl() {
+    const qs = new URLSearchParams();
+    for (const p of ep.params) {
+      const v = inputs[p.name].value.trim();
+      if (v) qs.set(p.name, v);
+    }
+    const q = qs.toString();
+    return ep.path + (q ? `?${q}` : '');
+  }
+
+  async function send() {
+    const path = buildUrl();
+    sendBtn.disabled = true;
+    const started = performance.now();
+    let res, text;
+    try {
+      res = await fetch(path);
+      text = await res.text();
+    } catch (err) {
+      result.hidden = false;
+      result.innerHTML = `<div class="meta"><span class="status s0">failed</span>
+        <span class="dim">${esc(err.message)} — is the server still running?</span></div>`;
+      sendBtn.disabled = false;
+      return;
+    }
+    const ms = Math.round(performance.now() - started);
+    const bytes = new TextEncoder().encode(text).length;
+
+    let body = text;
+    try { body = JSON.stringify(JSON.parse(text), null, 2); } catch { /* not JSON, show raw */ }
+
+    const full = location.origin + path;
+    result.hidden = false;
+    result.innerHTML = `
+      <div class="meta">
+        <span class="status s${String(res.status)[0]}">${res.status} ${esc(res.statusText)}</span>
+        <span class="dim">${ms} ms</span>
+        <span class="dim">${bytes} bytes</span>
+        <span class="dim">cache-control: ${esc(res.headers.get('cache-control') ?? '—')}</span>
+      </div>
+      <div class="curlrow">
+        <code class="url">curl "${esc(full)}"</code>
+        <button class="copy">Copy</button>
+      </div>
+      <pre class="json">${highlight(body)}</pre>`;
+
+    result.querySelector('.copy').addEventListener('click', (e) => {
+      navigator.clipboard.writeText(`curl "${full}"`).then(() => {
+        e.target.textContent = 'Copied';
+        setTimeout(() => { e.target.textContent = 'Copy'; }, 1200);
+      });
+    });
+    sendBtn.disabled = false;
+  }
+
+  return el;
+}
+
+const host = document.getElementById('endpoints');
+for (const ep of ENDPOINTS) host.appendChild(card(ep));
+
+/**
+ * Answers "am I looking at real blog messages or the fixtures?" without
+ * anyone having to read a JSON field.
+ */
+async function showServing() {
+  const box = document.getElementById('serving');
+  try {
+    const data = await (await fetch('/v1/health')).json();
+    const live = data.source === 'store';
+    box.innerHTML = `
+      <span class="tag ${live ? 'live' : ''}">${live ? 'ingested from the blog' : 'built-in fixtures'}</span>
+      <span><span class="k">source</span> <span class="v">${esc(data.source)}</span></span>
+      <span><span class="k">topics</span> <span class="v">${data.topics}</span></span>
+      <span><span class="k">messages</span> <span class="v">${data.messages}</span></span>
+      <span><span class="k">last updated</span> <span class="v">${esc(data.last_updated ?? '—')}</span></span>
+      ${live ? '' : '<span class="k">Run <code>npm run ingest</code> to serve real blog messages.</span>'}`;
+  } catch {
+    box.innerHTML = '<span class="k">Could not reach the API — is <code>npm run dev</code> running?</span>';
+  }
+}
+showServing();
+</script>
+</body>
+</html>

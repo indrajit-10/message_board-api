@@ -30,6 +30,11 @@ export function createApp(source: MessageSource): Express {
   // Demo page for the CTA, served from the API so it can call it same-origin.
   app.use(express.static(PUBLIC_DIR));
 
+  // Pretty path for the explorer; express.static already serves /api.html.
+  app.get('/api', (_req: Request, res: Response) => {
+    res.sendFile(join(PUBLIC_DIR, 'api.html'));
+  });
+
   /**
    * The CTA on a card-sending page: hand over the card's category and
    * subcategory, get back messages the user can drop into the message box.

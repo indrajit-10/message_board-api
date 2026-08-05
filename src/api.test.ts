@@ -164,6 +164,13 @@ describe('supporting endpoints', () => {
     assert.match(res.headers.get('content-type') ?? '', /text\/html/);
     assert.match(await res.text(), /Get Messages/);
   });
+
+  it('serves the API explorer at /api', async () => {
+    const res = await fetch(`${base}/api`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(await res.text(), /API explorer/);
+  });
 });
 
 /**
