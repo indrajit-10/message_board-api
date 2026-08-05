@@ -22,7 +22,7 @@ export interface ExtractResult {
   rejected: Record<string, number>;
 }
 
-const DEFAULTS = { minLength: 20, maxLength: 400 };
+const DEFAULTS = { minLength: 15, maxLength: 400 };
 
 /**
  * Phrases that mark navigation, calls to action and housekeeping rather than
@@ -81,7 +81,7 @@ export function rejectReason(text: string, opts: Required<ExtractOptions>): stri
   const letters = text.replace(/[^a-z]/gi, '').length;
   if (letters < text.length * 0.5) return 'mostly_symbols';
   if (text === text.toUpperCase() && letters > 3) return 'all_caps';
-  if (text.split(/\s+/).length < 4) return 'too_few_words';
+  if (text.split(/\s+/).length < 3) return 'too_few_words';
 
   return null;
 }
@@ -187,18 +187,33 @@ export function contentRegion($: cheerio.CheerioAPI): cheerio.Cheerio<never> {
   return $('body') as unknown as cheerio.Cheerio<never>;
 }
 
+/**
+ * <li>, <blockquote> and <br>-split paragraphs each mark a list of wishes
+ * outright. A page can use more than one — a numbered list followed by a few
+ * pull-quotes — so all three are kept and merged.
+ *
+ * Bare <p> is different: on a page with no message list it holds the messages,
+ * but on a page that has one it holds the surrounding prose. So it only runs
+ * when the structured markup found nothing, rather than adding intro
+ * paragraphs to every page that has a list.
+ */
+const STRUCTURED = new Set(['list', 'blockquote', 'linebreak']);
+
 export function extractMessages(html: string, options: ExtractOptions = {}): ExtractResult {
   const opts = { ...DEFAULTS, ...options };
   const $ = cheerio.load(html);
   const region = contentRegion($);
 
-  let best: ExtractResult = { messages: [], pattern: 'none', candidates: 0, rejected: {} };
+  const rejected: Record<string, number> = {};
+  const seen = new Set<string>();
+  const messages: string[] = [];
+  const used: string[] = [];
+  let candidates = 0;
 
-  for (const strategy of STRATEGIES) {
-    const rejected: Record<string, number> = {};
-    const seen = new Set<string>();
-    const messages: string[] = [];
+  const harvest = (strategy: Strategy): number => {
     const raw = strategy.collect($, region);
+    candidates += raw.length;
+    let kept = 0;
 
     for (const candidate of raw) {
       const text = clean(candidate);
@@ -214,13 +229,27 @@ export function extractMessages(html: string, options: ExtractOptions = {}): Ext
       }
       seen.add(key);
       messages.push(text);
+      kept++;
     }
 
-    // Strictly greater keeps the earlier, more specific strategy on a tie.
-    if (messages.length > best.messages.length) {
-      best = { messages, pattern: strategy.name, candidates: raw.length, rejected };
+    if (kept > 0) used.push(strategy.name);
+    return kept;
+  };
+
+  for (const strategy of STRATEGIES) {
+    if (STRUCTURED.has(strategy.name)) harvest(strategy);
+  }
+
+  if (messages.length === 0) {
+    for (const strategy of STRATEGIES) {
+      if (!STRUCTURED.has(strategy.name)) harvest(strategy);
     }
   }
 
-  return best;
+  return {
+    messages,
+    pattern: used.length ? used.join('+') : 'none',
+    candidates,
+    rejected,
+  };
 }

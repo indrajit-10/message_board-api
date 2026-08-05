@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Topic } from '../types.js';
 import { crawlSection } from './crawl.js';
-import { extractMessages } from './extract.js';
+import { extractMessages, type ExtractOptions } from './extract.js';
 import { fetchPosts, type RawPost } from './fetchPosts.js';
 import { DEFAULT_BASE } from './http.js';
 import { isMain } from './isMain.js';
@@ -27,6 +27,8 @@ interface Args {
   dryRun: boolean;
   verbose: boolean;
   reset: boolean;
+  minLength?: number;
+  maxLength?: number;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -49,6 +51,8 @@ function parseArgs(argv: string[]): Args {
     dryRun: argv.includes('--dry-run'),
     verbose: argv.includes('--verbose'),
     reset: argv.includes('--reset'),
+    ...(value('--min-length') ? { minLength: Number(value('--min-length')) } : {}),
+    ...(value('--max-length') ? { maxLength: Number(value('--max-length')) } : {}),
   };
 }
 
@@ -67,21 +71,26 @@ export interface IngestSummary {
   patterns: Record<string, number>;
   unmapped: RawPost[];
   empty: RawPost[];
+  rejected: Record<string, number>;
   seededFallback: boolean;
 }
 
 /** Pure pipeline over already-fetched posts, so it can be tested without network. */
-export function buildTopics(posts: RawPost[], rules: Rule[]) {
+export function buildTopics(posts: RawPost[], rules: Rule[], options: ExtractOptions = {}) {
   const buckets = new Map<string, Bucket>();
   const patterns: Record<string, number> = {};
   const unmapped: RawPost[] = [];
   const empty: RawPost[] = [];
+  const rejected: Record<string, number> = {};
   let extracted = 0;
 
   for (const post of posts) {
-    const result = extractMessages(post.html);
+    const result = extractMessages(post.html, options);
     patterns[result.pattern] = (patterns[result.pattern] ?? 0) + 1;
     extracted += result.messages.length;
+    for (const [reason, n] of Object.entries(result.rejected)) {
+      rejected[reason] = (rejected[reason] ?? 0) + n;
+    }
 
     if (result.messages.length === 0) {
       empty.push(post);
@@ -124,7 +133,7 @@ export function buildTopics(posts: RawPost[], rules: Rule[]) {
 
   topics.sort((a, b) => b.messages.length - a.messages.length);
   const kept = topics.reduce((n, t) => n + t.messages.length, 0);
-  return { topics, patterns, unmapped, empty, extracted, kept };
+  return { topics, patterns, unmapped, empty, extracted, kept, rejected };
 }
 
 /**
@@ -157,6 +166,13 @@ function report(summary: IngestSummary, args: Args): void {
   );
   line(`extracted   ${summary.extracted} messages`);
   line(`kept        ${summary.kept} after dedupe`);
+  // Anything the filters threw away, so a real message being dropped is
+  // visible rather than silently missing from the store.
+  const dropped = Object.entries(summary.rejected).sort((a, b) => b[1] - a[1]);
+  if (dropped.length) {
+    line(`rejected    ${dropped.map(([r, n]) => `${r}=${n}`).join('  ')}`);
+    line('            tune with --min-length / --max-length, or edit extract.ts');
+  }
   line();
 
   line(`Topics (${summary.topics.length}):`);
@@ -239,7 +255,10 @@ async function main(): Promise<void> {
   const rules = await loadRules();
   const { posts, transport } = await collect(args);
 
-  const built = buildTopics(posts, rules);
+  const built = buildTopics(posts, rules, {
+    ...(args.minLength === undefined ? {} : { minLength: args.minLength }),
+    ...(args.maxLength === undefined ? {} : { maxLength: args.maxLength }),
+  });
   const seededFallback = await ensureFallback(built.topics);
   // Re-sort: a seeded fallback is appended after buildTopics has ordered them.
   built.topics.sort((a, b) => b.messages.length - a.messages.length);
@@ -253,6 +272,7 @@ async function main(): Promise<void> {
     patterns: built.patterns,
     unmapped: built.unmapped,
     empty: built.empty,
+    rejected: built.rejected,
     seededFallback,
   };
 

@@ -34,7 +34,7 @@ const WELL_KNOWN = [
 ];
 
 /** A sitemap index can list many children; cap the follow-up to stay polite. */
-const MAX_CHILD_SITEMAPS = 50;
+const MAX_CHILD_SITEMAPS = 200;
 
 function locations(xml: string): { urls: string[]; isIndex: boolean } {
   const $ = cheerio.load(xml, { xmlMode: true });

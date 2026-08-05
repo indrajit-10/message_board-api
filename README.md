@@ -200,6 +200,8 @@ client ──▶ this API ──▶ data/topics.json ◀── npm run ingest �
 
 ### What gets crawled
 
+To take the whole site rather than one section, pass `--section /`.
+
 By default ingest takes `/what-to-write-in-a-card/` and **everything beneath
 it** — `/birthday/`, `/birthday/for-mom/`, `/anniversary/` and so on. Whether
 those pages are WordPress posts, pages or hand-built HTML is not knowable from
@@ -240,6 +242,8 @@ extraction quality drops: a theme change shows up here first.
 | `--transport wp-json` | Use the REST API instead of crawling |
 | `--category <slug>` | With `--transport wp-json`, restrict to one blog category |
 | `--limit <n>` | Stop after n pages |
+| `--min-length <n>` | Shortest text kept as a message, default 15 |
+| `--max-length <n>` | Longest, default 400 |
 | `--base <url>` | Point at a different host |
 | `--out <path>` | Write somewhere other than `data/topics.json` |
 
@@ -262,7 +266,7 @@ Topics (5):
   Add rules to src/ingest/rules.json to bring these in.
 ```
 
-Three lines are worth acting on:
+Four lines are worth acting on:
 
 - **`markup`** — which HTML shape each post used. Posts do not agree on how to
   mark up a list of wishes, so every strategy runs and the one yielding the most
@@ -271,6 +275,9 @@ Three lines are worth acting on:
   `extract.ts` does not read yet.
 - **posts with no card mapping** — real messages that no card category claims.
   This is the list that tells you which rules to write next.
+- **`rejected`** — what the filters threw away and why. `too_short` in the
+  thousands means the length floor is wrong for this site; `boilerplate` in the
+  thousands means it is working. This is where a message going missing shows up.
 
 Nothing is dropped silently; anything skipped is named.
 

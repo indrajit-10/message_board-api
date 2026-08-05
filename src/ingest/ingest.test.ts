@@ -127,7 +127,7 @@ describe('extractMessages', () => {
     assert.equal(messages.length, 3);
   });
 
-  it('picks the richest markup when a post mixes several', () => {
+  it('keeps every list on a page that mixes markup', () => {
     const mixed = `
       <blockquote><p>One quoted wish that is long enough to survive filtering.</p></blockquote>
       <ul>
@@ -136,8 +136,37 @@ describe('extractMessages', () => {
         <li>Here is to another year of friendship and terrible jokes.</li>
       </ul>`;
     const { messages, pattern } = extractMessages(mixed);
+    assert.equal(messages.length, 4, 'the quote is a message too, not a losing candidate');
+    assert.equal(pattern, 'list+blockquote');
+  });
+
+  /**
+   * Prose is the exception. On a page with no message list the wishes are in
+   * <p>, but on a page that has one the <p> holds the introduction — so bare
+   * paragraphs are a fallback, never merged in alongside a list.
+   */
+  it('does not mix intro prose in with a list', () => {
+    const withProse = `
+      <p>Birthdays are a wonderful chance to tell someone how much they mean.</p>
+      <ul>
+        <li>Wishing you a very happy birthday and a wonderful year ahead.</li>
+        <li>May your day be filled with laughter and very good company.</li>
+      </ul>`;
+    const { messages, pattern } = extractMessages(withProse);
     assert.equal(pattern, 'list');
-    assert.equal(messages.length, 3);
+    assert.equal(messages.length, 2);
+    assert.ok(!messages.some((m) => m.startsWith('Birthdays are')));
+  });
+
+  it('reports why candidates were dropped', () => {
+    const html = `<ul>
+      <li>Wishing you a very happy birthday and a wonderful year ahead.</li>
+      <li>Copyright 123Greetings, all rights reserved worldwide</li>
+      <li>Tiny</li>
+    </ul>`;
+    const { rejected } = extractMessages(html);
+    assert.equal(rejected.boilerplate, 1);
+    assert.equal(rejected.too_short, 1);
   });
 
   it('reports nothing rather than guessing on a post with no messages', () => {
