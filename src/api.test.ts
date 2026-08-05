@@ -171,6 +171,64 @@ describe('supporting endpoints', () => {
     assert.match(res.headers.get('content-type') ?? '', /text\/html/);
     assert.match(await res.text(), /API explorer/);
   });
+
+  it('serves the browser at /browse', async () => {
+    const res = await fetch(`${base}/browse`);
+    assert.equal(res.status, 200);
+    assert.match(await res.text(), /Browse messages/);
+  });
+});
+
+describe('inspecting what is loaded', () => {
+  it('returns a whole topic, not a sample of it', async () => {
+    const listed = (await (await fetch(`${base}/v1/categories`)).json()) as {
+      topics: Array<{ id: string; message_count: number }>;
+    };
+    const first = listed.topics[0]!;
+
+    const res = await fetch(`${base}/v1/topics/${first.id}`);
+    const body = (await res.json()) as { count: number; messages: Array<{ id: string }> };
+    assert.equal(res.status, 200);
+    assert.equal(body.count, first.message_count, 'should return every message, not five');
+    assert.equal(body.messages.length, first.message_count);
+  });
+
+  it('404s an unknown topic', async () => {
+    const res = await fetch(`${base}/v1/topics/not-a-topic`);
+    assert.equal(res.status, 404);
+  });
+
+  it('searches across every topic', async () => {
+    const res = await fetch(`${base}/v1/search?q=birthday`);
+    const body = (await res.json()) as {
+      total: number;
+      results: Array<{ text: string; topic: string }>;
+    };
+    assert.equal(res.status, 200);
+    assert.ok(body.total > 0);
+    for (const r of body.results) {
+      assert.match(r.text.toLowerCase(), /birthday/);
+      assert.ok(r.topic, 'each hit should say which topic it came from');
+    }
+  });
+
+  it('searches case-insensitively', async () => {
+    const lower = (await (await fetch(`${base}/v1/search?q=happy`)).json()) as { total: number };
+    const upper = (await (await fetch(`${base}/v1/search?q=HAPPY`)).json()) as { total: number };
+    assert.equal(lower.total, upper.total);
+  });
+
+  it('reports when results were truncated', async () => {
+    const res = await fetch(`${base}/v1/search?q=you&limit=2`);
+    const body = (await res.json()) as { total: number; count: number; truncated: boolean };
+    assert.equal(body.count, 2);
+    assert.equal(body.truncated, body.total > 2);
+  });
+
+  it('rejects an empty search', async () => {
+    assert.equal((await fetch(`${base}/v1/search`)).status, 400);
+    assert.equal((await fetch(`${base}/v1/search?q=%20`)).status, 400);
+  });
 });
 
 /**

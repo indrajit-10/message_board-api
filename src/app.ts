@@ -11,6 +11,8 @@ const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public')
 
 export const DEFAULT_LIMIT = 5;
 export const MAX_LIMIT = 25;
+export const DEFAULT_SEARCH_LIMIT = 100;
+export const MAX_SEARCH_LIMIT = 500;
 
 function firstParam(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
@@ -30,9 +32,12 @@ export function createApp(source: MessageSource): Express {
   // Demo page for the CTA, served from the API so it can call it same-origin.
   app.use(express.static(PUBLIC_DIR));
 
-  // Pretty path for the explorer; express.static already serves /api.html.
+  // Pretty paths; express.static already serves the .html files themselves.
   app.get('/api', (_req: Request, res: Response) => {
     res.sendFile(join(PUBLIC_DIR, 'api.html'));
+  });
+  app.get('/browse', (_req: Request, res: Response) => {
+    res.sendFile(join(PUBLIC_DIR, 'browse.html'));
   });
 
   /**
@@ -113,6 +118,65 @@ export function createApp(source: MessageSource): Express {
         message_count: t.messages.length,
       })),
     });
+  });
+
+  /**
+   * One topic with everything in it. The CTA never needs this — it exists so
+   * an ingest can be inspected, since counts alone do not tell you whether
+   * what was extracted is worth serving.
+   */
+  app.get('/v1/topics/:id', (req: Request, res: Response) => {
+    const topic = source.topics().find((t) => t.id === req.params.id);
+    if (!topic) {
+      fail(res, 404, 'unknown_topic', `No topic "${req.params.id}". See /v1/categories.`);
+      return;
+    }
+    const messages = toMessages(topic);
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({
+      id: topic.id,
+      label: topic.label,
+      serves: topic.serves,
+      count: messages.length,
+      messages,
+    });
+  });
+
+  /** Free-text search across every message, for spot-checking an ingest. */
+  app.get('/v1/search', (req: Request, res: Response) => {
+    const q = (firstParam(req.query.q) ?? '').trim();
+    if (!q) {
+      fail(res, 400, 'invalid_request', 'Query parameter "q" is required.');
+      return;
+    }
+
+    const rawLimit = firstParam(req.query.limit);
+    let limit = DEFAULT_SEARCH_LIMIT;
+    if (rawLimit !== undefined) {
+      const parsed = Number(rawLimit);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_SEARCH_LIMIT) {
+        fail(res, 400, 'invalid_request', `"limit" must be between 1 and ${MAX_SEARCH_LIMIT}.`);
+        return;
+      }
+      limit = parsed;
+    }
+
+    const needle = q.toLowerCase();
+    const results: Array<Record<string, string>> = [];
+    let total = 0;
+
+    for (const topic of source.topics()) {
+      for (const message of toMessages(topic)) {
+        if (!message.text.toLowerCase().includes(needle)) continue;
+        total++;
+        if (results.length < limit) {
+          results.push({ ...message, topic: topic.id, label: topic.label });
+        }
+      }
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ q, total, count: results.length, truncated: total > results.length, results });
   });
 
   app.get('/v1/health', (_req: Request, res: Response) => {

@@ -26,6 +26,19 @@ Open <http://localhost:3000> for the demo page, or call it directly:
 curl "http://localhost:3000/v1/messages?category=birthday&subcategory=friends"
 ```
 
+## Pages
+
+| URL | What it is |
+|---|---|
+| `/` | The CTA demo — the feature as a card sender sees it |
+| `/api` | API explorer — every endpoint, testable on its own |
+| `/browse` | Every message currently loaded, by topic, with search |
+
+All three are static files served by the API itself, so they call it
+same-origin with no build step. `/api` and `/browse` both show whether the
+messages are ingested or the built-in fixtures.
+
+
 ## Demo page
 
 `http://localhost:3000` is a stand-in for a card-sending page: a message box
@@ -90,6 +103,17 @@ Use it to decide where writing more messages actually pays off.
 ### `GET /v1/health`
 
 Source name, topic and message counts, last ingest timestamp.
+
+### `GET /v1/topics/:id`
+
+One topic with **every** message in it, rather than a sample. For checking what
+an ingest actually produced.
+
+### `GET /v1/search?q=`
+
+Free-text search across every message; each hit says which topic it came from.
+`limit` defaults to 100, max 500, and `truncated` says whether there were more.
+
 
 ## Two behaviours worth knowing
 
@@ -247,6 +271,8 @@ card, which is precisely the case the CTA exists to handle.
 ```
 public/
   index.html         demo page for the CTA
+  api.html           API explorer
+  browse.html        message browser
 src/
   app.ts             routes + validation
   taxonomy.ts        slug normalisation, fallback chain, stable message ids

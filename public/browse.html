@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Browse messages — message-board-api</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f5f3; --panel: #ffffff; --ink: #1c1a17; --muted: #6d675e;
+    --line: #e2ded7; --accent: #b4552d; --accent-soft: #fdf1ea;
+    --ok: #2f6b4f; --ok-soft: #e8f3ed; --warn: #8a6320; --warn-soft: #fbf2e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171614; --panel: #201e1b; --ink: #ece8e2; --muted: #9c958a;
+      --line: #34302b; --accent: #e08256; --accent-soft: #33241c;
+      --ok: #7fc4a1; --ok-soft: #1d2b24; --warn: #d9ad63; --warn-soft: #2d2519;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 30px 20px 60px; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  a { color: var(--accent); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { margin: 0 0 18px; color: var(--muted); }
+
+  .serving {
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 13px;
+  }
+  .serving .k { color: var(--muted); }
+  .serving .v { font-weight: 600; }
+  .tag {
+    font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+    background: var(--warn-soft); color: var(--warn); letter-spacing: .02em;
+  }
+  .tag.live { background: var(--ok-soft); color: var(--ok); }
+
+  .search { display: flex; gap: 10px; margin-bottom: 18px; }
+  .search input {
+    flex: 1; padding: 10px 13px; border: 1px solid var(--line); border-radius: 9px;
+    background: var(--panel); color: var(--ink); font: inherit;
+  }
+  .search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .search button {
+    padding: 0 16px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--muted); border-radius: 9px; font: 13px inherit; cursor: pointer;
+  }
+  .search button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .cols { display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  nav { padding: 8px; max-height: 78vh; overflow-y: auto; }
+  nav button {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+    width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px;
+    background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; cursor: pointer;
+  }
+  nav button:hover { background: var(--bg); }
+  nav button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  nav button .n { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  nav button.on .n { color: var(--accent); }
+
+  main { padding: 20px; min-height: 300px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .head h2 { font-size: 16px; margin: 0; }
+  .head .n { font-size: 12.5px; color: var(--muted); }
+  .serves { font-size: 12px; color: var(--muted); margin-bottom: 16px; word-break: break-word; }
+  .serves code { background: var(--bg); padding: 2px 6px; border-radius: 5px; margin-right: 4px; display: inline-block; }
+
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  li {
+    border: 1px solid var(--line); border-radius: 9px; padding: 10px 13px;
+    background: var(--bg); cursor: pointer;
+  }
+  li:hover { border-color: var(--accent); }
+  li .meta { display: flex; gap: 10px; align-items: baseline; margin-top: 6px; font-size: 11px; color: var(--muted); }
+  li .meta a { text-decoration: none; }
+  li mark { background: var(--accent-soft); color: var(--accent); padding: 0 2px; border-radius: 3px; }
+  li .copied { color: var(--ok); font-weight: 600; }
+
+  .empty { color: var(--muted); font-size: 14px; }
+  .hint { margin-top: 14px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Browse messages</h1>
+    <p>
+      Everything the API is currently serving, by topic. Click a message to copy it.
+      See also the <a href="/">CTA demo</a> and the <a href="/api">API explorer</a>.
+    </p>
+  </header>
+
+  <div class="serving" id="serving"><span class="k">Loading…</span></div>
+
+  <form class="search" id="searchForm">
+    <input id="q" type="search" placeholder="Search every message… e.g. mom, congratulations, thank you" autocomplete="off" />
+    <button type="button" id="clear">Clear</button>
+  </form>
+
+  <div class="cols">
+    <div class="panel"><nav id="nav"></nav></div>
+    <div class="panel"><main id="main"><p class="empty">Loading…</p></main></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let topics = [];
+let current = null;
+
+function highlight(text, needle) {
+  const safe = esc(text);
+  if (!needle) return safe;
+  // Escape the needle for use in a regex, and match against the escaped text.
+  const pattern = esc(needle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safe.replace(new RegExp(pattern, 'gi'), (m) => `<mark>${m}</mark>`);
+}
+
+function renderMessages(items, needle) {
+  if (!items.length) return '<p class="empty">Nothing here.</p>';
+  return `<ul>${items.map((m) => `
+    <li data-text="${esc(m.text)}">
+      <div class="text">${highlight(m.text, needle)}</div>
+      <div class="meta">
+        <span>${esc(m.id)}</span>
+        ${m.label ? `<span>${esc(m.label)}</span>` : ''}
+        ${m.source_url ? `<a href="${esc(m.source_url)}" target="_blank" rel="noreferrer">source</a>` : ''}
+      </div>
+    </li>`).join('')}</ul>`;
+}
+
+function wireCopy() {
+  for (const li of $('main').querySelectorAll('li')) {
+    li.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A') return;
+      navigator.clipboard.writeText(li.dataset.text).then(() => {
+        const meta = li.querySelector('.meta');
+        const note = document.createElement('span');
+        note.className = 'copied';
+        note.textContent = 'copied';
+        meta.appendChild(note);
+        setTimeout(() => note.remove(), 1100);
+      });
+    });
+  }
+}
+
+function markNav(id) {
+  for (const b of $('nav').querySelectorAll('button')) b.classList.toggle('on', b.dataset.id === id);
+}
+
+async function showTopic(id) {
+  current = id;
+  markNav(id);
+  $('main').innerHTML = '<p class="empty">Loading…</p>';
+  const res = await fetch(`/v1/topics/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    $('main').innerHTML = '<p class="empty">That topic is not loaded.</p>';
+    return;
+  }
+  const t = await res.json();
+  $('main').innerHTML = `
+    <div class="head"><h2>${esc(t.label)}</h2><span class="n">${t.count} messages</span></div>
+    <div class="serves">answers ${t.serves.map((s) => `<code>${esc(s)}</code>`).join('')}</div>
+    ${renderMessages(t.messages, '')}`;
+  wireCopy();
+}
+
+async function search(term) {
+  markNav(null);
+  $('main').innerHTML = '<p class="empty">Searching…</p>';
+  const res = await fetch(`/v1/search?q=${encodeURIComponent(term)}&limit=200`);
+  if (!res.ok) {
+    $('main').innerHTML = '<p class="empty">Enter something to search for.</p>';
+    return;
+  }
+  const data = await res.json();
+  $('main').innerHTML = `
+    <div class="head">
+      <h2>“${esc(term)}”</h2>
+      <span class="n">${data.total} match${data.total === 1 ? '' : 'es'}${data.truncated ? `, showing ${data.count}` : ''}</span>
+    </div>
+    ${renderMessages(data.results, term)}`;
+  wireCopy();
+}
+
+async function load() {
+  try {
+    const [health, cats] = await Promise.all([
+      fetch('/v1/health').then((r) => r.json()),
+      fetch('/v1/categories').then((r) => r.json()),
+    ]);
+
+    const live = health.source === 'store';
+    $('serving').innerHTML = `
+      <span class="tag ${live ? 'live' : ''}">${live ? 'ingested from the blog' : 'built-in fixtures'}</span>
+      <span><span class="k">topics</span> <span class="v">${health.topics}</span></span>
+      <span><span class="k">messages</span> <span class="v">${health.messages}</span></span>
+      <span><span class="k">last updated</span> <span class="v">${esc(health.last_updated ?? '—')}</span></span>
+      ${live ? '' : '<span class="k">Run <code>npm run ingest</code> to load real blog messages.</span>'}`;
+
+    topics = cats.topics;
+    $('nav').innerHTML = topics.map((t) => `
+      <button data-id="${esc(t.id)}">
+        <span>${esc(t.label)}</span><span class="n">${t.message_count}</span>
+      </button>`).join('');
+
+    for (const b of $('nav').querySelectorAll('button')) {
+      b.addEventListener('click', () => showTopic(b.dataset.id));
+    }
+
+    if (topics.length) await showTopic(topics[0].id);
+    else $('main').innerHTML = '<p class="empty">No topics loaded.</p>';
+  } catch {
+    $('serving').innerHTML = '<span class="k">Could not reach the API — is <code>npm run dev</code> running?</span>';
+    $('main').innerHTML = '<p class="empty">No connection.</p>';
+  }
+}
+
+let timer;
+$('q').addEventListener('input', (e) => {
+  const term = e.target.value.trim();
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    if (term) search(term);
+    else if (topics.length) showTopic(current ?? topics[0].id);
+  }, 200);
+});
+$('searchForm').addEventListener('submit', (e) => e.preventDefault());
+$('clear').addEventListener('click', () => {
+  $('q').value = '';
+  if (topics.length) showTopic(current ?? topics[0].id);
+});
+
+load();
+</script>
+</body>
+</html>
