@@ -32,16 +32,42 @@ export function haystack(post: MappablePost): string {
   return [post.slug.replace(/-/g, ' '), post.title, ...post.categories].join(' ').toLowerCase();
 }
 
+const patterns = new Map<string, RegExp>();
+
+/**
+ * Keywords match whole words, with an optional plural "s".
+ *
+ * Plain substring matching cannot tell "son" in "birthday-messages-for-son"
+ * from the one in "grandson", "person" or "season", and reads "mother" inside
+ * "grandmother" — which is why relations had to be lumped into one rule per
+ * family. Anchoring to word edges lets each relation have its own rule and its
+ * own messages. The optional "s" is there because posts are titled "for
+ * friends" while the keyword reads "friend".
+ */
+function keywordPattern(keyword: string): RegExp {
+  let pattern = patterns.get(keyword);
+  if (!pattern) {
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escaped}s?(?![\\p{L}\\p{N}])`, 'iu');
+    patterns.set(keyword, pattern);
+  }
+  return pattern;
+}
+
+export function mentions(text: string, keyword: string): boolean {
+  return keywordPattern(keyword).test(text);
+}
+
 /**
  * First matching rule wins, so `rules.json` is ordered specific to general —
- * "birthday wishes for mom" has to reach the family rule before the catch-all
+ * "birthday messages for mom" has to reach the mom rule before the catch-all
  * birthday one.
  */
 export function matchRule(post: MappablePost, rules: Rule[]): Rule | null {
   const text = haystack(post);
   for (const rule of rules) {
-    const allOk = rule.all.every((k) => text.includes(k));
-    const anyOk = rule.any.length === 0 || rule.any.some((k) => text.includes(k));
+    const allOk = rule.all.every((k) => mentions(text, k));
+    const anyOk = rule.any.length === 0 || rule.any.some((k) => mentions(text, k));
     if (allOk && anyOk) return rule;
   }
   return null;

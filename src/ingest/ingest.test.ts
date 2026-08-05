@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { extractMessages } from './extract.js';
 import { isMain } from './isMain.js';
 import type { RawPost } from './fetchPosts.js';
-import { loadRules, matchRule, type Rule } from './mapping.js';
+import { loadRules, matchRule, mentions, type Rule } from './mapping.js';
 import { buildTopics } from './run.js';
 
 /**
@@ -251,8 +251,61 @@ describe('the shipped rules', () => {
 
   it('still prefers the specific rule inside a section', async () => {
     const rules = await loadRules();
-    assert.equal(matchRule(post('birthday-messages-for-mom'), rules)?.id, 'birthday-family');
+    assert.equal(matchRule(post('birthday-messages-for-mom'), rules)?.id, 'birthday-mom');
     assert.equal(matchRule(post('birthday-messages-for-best-friend'), rules)?.id, 'birthday-friends');
+  });
+
+  /**
+   * Every relation needs its own rule. Lumping them means a card for Mom can
+   * be answered with "Happy birthday, Dad" — worse than a generic wish,
+   * because it reads as addressed to the wrong person.
+   */
+  it('keeps each family relation apart', async () => {
+    const rules = await loadRules();
+    const place = (slug: string) => matchRule(post(slug), rules)?.id;
+
+    assert.equal(place('birthday-messages-for-mom'), 'birthday-mom');
+    assert.equal(place('birthday-messages-for-dad'), 'birthday-dad');
+    assert.equal(place('birthday-messages-for-sister'), 'birthday-sister');
+    assert.equal(place('birthday-messages-for-brother'), 'birthday-brother');
+    assert.equal(place('birthday-messages-for-son'), 'birthday-son');
+    assert.equal(place('birthday-messages-for-daughter'), 'birthday-daughter');
+    assert.equal(place('birthday-messages-for-wife'), 'birthday-wife');
+    assert.equal(place('birthday-messages-for-husband'), 'birthday-husband');
+  });
+
+  it('does not read a grandparent as a parent', async () => {
+    const rules = await loadRules();
+    assert.equal(matchRule(post('birthday-messages-for-grandmother'), rules)?.id, 'birthday-grandmother');
+    assert.equal(matchRule(post('birthday-messages-for-grandfather'), rules)?.id, 'birthday-grandfather');
+  });
+
+  it('does not read a girlfriend as a friend', async () => {
+    const rules = await loadRules();
+    assert.equal(matchRule(post('birthday-messages-for-girlfriend'), rules)?.id, 'birthday-girlfriend');
+    assert.equal(matchRule(post('birthday-messages-for-boyfriend'), rules)?.id, 'birthday-boyfriend');
+  });
+});
+
+describe('keyword matching', () => {
+  it('matches whole words only', () => {
+    assert.equal(mentions('birthday messages for son', 'son'), true);
+    for (const text of ['a message for any person', 'wishes for the season', 'for my grandson']) {
+      assert.equal(mentions(text, 'son'), false, `"son" should not match in: ${text}`);
+    }
+    assert.equal(mentions('wishes for grandmother', 'mother'), false);
+    assert.equal(mentions('wishes for mother', 'mother'), true);
+  });
+
+  it('tolerates a plural, since posts say "for friends"', () => {
+    assert.equal(mentions('birthday messages for friends', 'friend'), true);
+    assert.equal(mentions('birthday messages for girlfriend', 'friend'), false);
+  });
+
+  it('handles keywords with punctuation and spaces', () => {
+    assert.equal(mentions('the best mother\'s day wishes', "mother's day"), true);
+    assert.equal(mentions('notes to say thank you today', 'thank you'), true);
+    assert.equal(mentions('messages for a co-worker', 'co-worker'), true);
   });
 
   it('has exactly one global fallback, and it is last', async () => {
