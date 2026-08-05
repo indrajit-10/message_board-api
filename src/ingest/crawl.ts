@@ -110,6 +110,7 @@ export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
   const pages: RawPost[] = [];
   let fetched = 0;
   let failed = 0;
+  let deepest = 0;
 
   while (queue.length && pages.length < maxPages) {
     const { url, depth } = queue.shift()!;
@@ -125,6 +126,7 @@ export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
 
     const $ = cheerio.load(res.body);
     const segments = sectionSegments(url, base, section);
+    deepest = Math.max(deepest, depth);
 
     pages.push({
       slug: segments.at(-1) ?? 'index',
@@ -150,10 +152,20 @@ export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
     await pause(delayMs);
   }
 
+  const stoppedShort = pages.length >= maxPages;
   onProgress?.(
     `  crawl finished: ${pages.length} pages kept, ${fetched} fetched, ${failed} skipped` +
-      (pages.length >= maxPages ? `, stopped at the ${maxPages}-page cap` : ''),
+      `, ${deepest} levels deep` +
+      (stoppedShort ? `, STOPPED at the ${maxPages}-page cap` : ''),
   );
+  // Hitting a cap means pages were left unread; say so rather than let the
+  // result look like the whole section.
+  if (stoppedShort) {
+    onProgress?.(`  raise it with --limit if the section is larger than ${maxPages} pages`);
+  }
+  if (deepest >= maxDepth) {
+    onProgress?.(`  reached the depth limit of ${maxDepth}; anything deeper was not followed`);
+  }
 
   if (pages.length === 0) {
     throw new Error(
