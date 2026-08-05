@@ -4,7 +4,17 @@ import { get, pause } from './http.js';
 
 export interface CrawlOptions {
   base: string;
+  /** Where to begin. */
   section: string;
+  /**
+   * What counts as in bounds, default the whole host.
+   *
+   * Kept separate from the starting point on purpose. The section index is a
+   * hub: it links to message pages that live elsewhere on the site, so using
+   * it as the boundary as well means following none of them and coming back
+   * with the hub and little else.
+   */
+  scope?: string;
   maxPages?: number;
   maxDepth?: number;
   delayMs?: number;
@@ -88,6 +98,7 @@ function pageTitle($: cheerio.CheerioAPI): string {
  */
 export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
   const { base, section, onProgress } = options;
+  const scope = options.scope ?? '/';
   const maxPages = options.maxPages ?? DEFAULTS.maxPages;
   const maxDepth = options.maxDepth ?? DEFAULTS.maxDepth;
   const delayMs = options.delayMs ?? DEFAULTS.delayMs;
@@ -102,7 +113,7 @@ export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
   // can list a section index without listing everything beneath it.
   for (const seed of options.seeds ?? []) {
     const url = normaliseUrl(seed, base);
-    if (!url || seen.has(url) || !isUnderSection(url, base, section)) continue;
+    if (!url || seen.has(url) || !isUnderSection(url, base, scope)) continue;
     seen.add(url);
     queue.push({ url, depth: 0 });
   }
@@ -125,7 +136,7 @@ export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
     }
 
     const $ = cheerio.load(res.body);
-    const segments = sectionSegments(url, base, section);
+    const segments = sectionSegments(url, base, scope);
     deepest = Math.max(deepest, depth);
 
     pages.push({
@@ -142,7 +153,7 @@ export async function crawlSection(options: CrawlOptions): Promise<RawPost[]> {
       for (const el of $('a[href]').toArray()) {
         const href = normaliseUrl($(el).attr('href') ?? '', url);
         if (!href || seen.has(href)) continue;
-        if (!isUnderSection(href, base, section)) continue;
+        if (!isUnderSection(href, base, scope)) continue;
         seen.add(href);
         queue.push({ url: href, depth: depth + 1 });
       }

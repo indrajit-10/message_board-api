@@ -220,6 +220,25 @@
       ]
     },
     {
+      "id": "birthday-first",
+      "label": "First birthday messages",
+      "serves": [
+        "birthday/1st_birthday",
+        "birthday/first_birthday",
+        "birthday/baby"
+      ],
+      "all": [
+        "birthday"
+      ],
+      "any": [
+        "1st birthday",
+        "first birthday",
+        "1st bday",
+        "one year old",
+        "turning one"
+      ]
+    },
+    {
       "id": "birthday-general",
       "label": "Birthday wishes",
       "serves": [

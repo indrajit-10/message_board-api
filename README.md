@@ -200,7 +200,19 @@ client ──▶ this API ──▶ data/topics.json ◀── npm run ingest �
 
 ### What gets crawled
 
-To take the whole site rather than one section, pass `--section /`.
+### Where it starts vs what it may reach
+
+`--section` is where the crawl **begins**; `--scope` is what it is **allowed to
+reach**, and defaults to the whole host.
+
+They are separate because the section index is a hub: it links out to message
+pages that live at the site root — `/birthday-messages/`,
+`/messages-for-1st-birthday/` — not beneath its own path. Using the hub as the
+boundary follows none of them and comes back with the hub and little else.
+
+Narrow it with `--scope /what-to-write-in-a-card/` if you only want that subtree.
+Pages outside it that turn out not to be message pages simply yield nothing and
+are listed in the summary.
 
 By default ingest takes `/what-to-write-in-a-card/` and **everything beneath
 it** — `/birthday/`, `/birthday/for-mom/`, `/anniversary/` and so on. Whether
@@ -238,7 +250,8 @@ extraction quality drops: a theme change shows up here first.
 | `--dry-run` | Report what would be extracted, write nothing |
 | `--verbose` | Also print a sample of the kept messages |
 | `--reset` | Delete the store first, so nothing from a previous run survives |
-| `--section <path>` | Crawl a different subtree, default `/what-to-write-in-a-card/` |
+| `--section <path>` | Where to start, default `/what-to-write-in-a-card/` |
+| `--scope <path>` | What the crawl may reach, default `/` (the whole host) |
 | `--transport wp-json` | Use the REST API instead of crawling |
 | `--category <slug>` | With `--transport wp-json`, restrict to one blog category |
 | `--limit <n>` | Stop after n pages |

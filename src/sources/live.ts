@@ -2,13 +2,14 @@ import { crawlSection } from '../ingest/crawl.js';
 import { DEFAULT_BASE } from '../ingest/http.js';
 import { loadRules } from '../ingest/mapping.js';
 import { discoverFromSitemap } from '../ingest/sitemap.js';
-import { buildTopics, DEFAULT_SECTION, ensureFallback } from '../ingest/run.js';
+import { buildTopics, DEFAULT_SCOPE, DEFAULT_SECTION, ensureFallback } from '../ingest/run.js';
 import type { MessageSource, Topic } from '../types.js';
 import { FixtureSource } from './fixture.js';
 
 export interface LiveOptions {
   base?: string;
   section?: string;
+  scope?: string;
   /** How often to re-read the blog. Set to 0 to read once at startup. */
   refreshMs?: number;
   quiet?: boolean;
@@ -64,14 +65,15 @@ export class LiveSource implements MessageSource {
   async #refresh(): Promise<void> {
     const base = this.options.base ?? DEFAULT_BASE;
     const section = this.options.section ?? DEFAULT_SECTION;
+    const scope = this.options.scope ?? DEFAULT_SCOPE;
     const log = (m: string) => {
       if (!this.options.quiet) console.log(m);
     };
 
     try {
       log(`Reading ${base}${section} …`);
-      const seeds = await discoverFromSitemap(base, section, log);
-      const pages = await crawlSection({ base, section, seeds, onProgress: log });
+      const seeds = await discoverFromSitemap(base, scope, log);
+      const pages = await crawlSection({ base, section, scope, seeds, onProgress: log });
       const rules = await loadRules();
       const { topics, kept } = buildTopics(pages, rules);
       await ensureFallback(topics);

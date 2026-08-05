@@ -17,10 +17,21 @@ const FIXTURES = join(ROOT, 'src', 'sources', 'fixtures', 'topics.json');
 /** Where the card messages live. Everything under it is fair game. */
 export const DEFAULT_SECTION = '/what-to-write-in-a-card/';
 
+/**
+ * What the crawl is allowed to reach, as opposed to where it starts.
+ *
+ * The message pages sit at the site root — /birthday-messages/,
+ * /messages-for-1st-birthday/ — while /what-to-write-in-a-card/ is the hub
+ * that links to them. Bounding the crawl to the hub's own path would follow
+ * none of them.
+ */
+export const DEFAULT_SCOPE = '/';
+
 interface Args {
   base: string;
   out: string;
   section: string;
+  scope: string;
   transport: 'crawl' | 'wp-json';
   limit?: number;
   categorySlug?: string;
@@ -45,6 +56,7 @@ function parseArgs(argv: string[]): Args {
     base: value('--base') ?? DEFAULT_BASE,
     out: value('--out') ?? DEFAULT_OUT,
     section: value('--section') ?? DEFAULT_SECTION,
+    scope: value('--scope') ?? DEFAULT_SCOPE,
     transport,
     limit: limit ? Number(limit) : undefined,
     categorySlug: value('--category'),
@@ -227,15 +239,16 @@ async function collect(args: Args): Promise<{ posts: RawPost[]; transport: strin
     });
   }
 
-  const seeds = await discoverFromSitemap(args.base, args.section, onProgress);
+  const seeds = await discoverFromSitemap(args.base, args.scope, onProgress);
   const pages = await crawlSection({
     base: args.base,
     section: args.section,
+    scope: args.scope,
     seeds,
     ...(args.limit === undefined ? {} : { maxPages: args.limit }),
     onProgress,
   });
-  return { posts: pages, transport: `crawl ${args.section}` };
+  return { posts: pages, transport: `crawl ${args.section} scope=${args.scope}` };
 }
 
 async function main(): Promise<void> {
@@ -248,7 +261,7 @@ async function main(): Promise<void> {
 
   console.log(
     args.transport === 'crawl'
-      ? `Crawling ${args.base}${args.section} and everything under it`
+      ? `Crawling ${args.base}${args.section}, following links across ${args.scope}`
       : `Ingesting from ${args.base}${args.categorySlug ? ` [${args.categorySlug}]` : ''}`,
   );
 
