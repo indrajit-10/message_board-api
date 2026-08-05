@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { extractMessages } from './extract.js';
 import { isMain } from './isMain.js';
 import type { RawPost } from './fetchPosts.js';
-import { matchRule, type Rule } from './mapping.js';
+import { loadRules, matchRule, type Rule } from './mapping.js';
 import { buildTopics } from './run.js';
 
 /**
@@ -225,6 +225,46 @@ describe('matchRule', () => {
 
   it('returns null for a post it cannot place', () => {
     assert.equal(matchRule(post('how-we-redesigned-our-app'), RULES), null);
+  });
+});
+
+/**
+ * The blog groups posts into sections named "<topic>-messages" — e.g.
+ * /birthday-messages/, /everyday-messages/. These check the shipped rules
+ * against that naming, since a section nothing claims is a section whose
+ * messages never reach the API.
+ */
+describe('the shipped rules', () => {
+  it('places the blog’s own section slugs', async () => {
+    const rules = await loadRules();
+    const place = (slug: string) => matchRule(post(slug), rules)?.id;
+
+    assert.equal(place('birthday-messages'), 'birthday-general');
+    assert.equal(place('everyday-messages'), 'everyday');
+    assert.equal(place('anniversary-messages'), 'anniversary');
+    assert.equal(place('thank-you-messages'), 'thank-you');
+    assert.equal(place('get-well-messages'), 'get-well');
+    assert.equal(place('love-messages'), 'love');
+    assert.equal(place('sympathy-messages'), 'sympathy');
+    assert.equal(place('congratulations-messages'), 'congratulations');
+  });
+
+  it('still prefers the specific rule inside a section', async () => {
+    const rules = await loadRules();
+    assert.equal(matchRule(post('birthday-messages-for-mom'), rules)?.id, 'birthday-family');
+    assert.equal(matchRule(post('birthday-messages-for-best-friend'), rules)?.id, 'birthday-friends');
+  });
+
+  it('has exactly one global fallback, and it is last', async () => {
+    const rules = await loadRules();
+    const globals = rules.filter((r) => r.serves.includes('*'));
+    assert.equal(globals.length, 1, 'more than one rule serving "*" makes resolution order matter');
+    assert.equal(rules.at(-1)?.id, globals[0]?.id, 'the "*" rule must not claim posts a specific rule wants');
+  });
+
+  it('leaves a post that is not about card messages unplaced', async () => {
+    const rules = await loadRules();
+    assert.equal(matchRule(post('we-redesigned-our-mobile-app'), rules), null);
   });
 });
 
