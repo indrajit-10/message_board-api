@@ -5,6 +5,7 @@ import type { Topic } from '../types.js';
 import { extractMessages } from './extract.js';
 import { fetchPosts, type RawPost } from './fetchPosts.js';
 import { DEFAULT_BASE } from './http.js';
+import { isMain } from './isMain.js';
 import { loadRules, matchRule, type Rule } from './mapping.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -243,7 +244,7 @@ async function main(): Promise<void> {
   console.log('Restart the API to serve it (it picks up the store automatically).');
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   // A blocked host or a moved endpoint is an expected outcome here, not a bug
   // in this script — say what happened and what to try, without a stack trace.
   try {

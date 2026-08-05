@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import { DEFAULT_BASE, get, getJson } from './http.js';
+import { isMain } from './isMain.js';
 
 /**
  * Reports what the blog actually exposes, so ingest is configured against
@@ -160,7 +161,7 @@ function print(report: ProbeReport): void {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const base = process.argv.includes('--base')
     ? (process.argv[process.argv.indexOf('--base') + 1] ?? DEFAULT_BASE)
     : DEFAULT_BASE;

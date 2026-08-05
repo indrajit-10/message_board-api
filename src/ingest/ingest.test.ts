@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { extractMessages } from './extract.js';
+import { isMain } from './isMain.js';
 import type { RawPost } from './fetchPosts.js';
 import { matchRule, type Rule } from './mapping.js';
 import { buildTopics } from './run.js';
@@ -141,6 +143,31 @@ describe('extractMessages', () => {
     const { messages, pattern } = extractMessages('<p>Short.</p><h2>A heading</h2>');
     assert.equal(messages.length, 0);
     assert.equal(pattern, 'none');
+  });
+});
+
+describe('isMain', () => {
+  it('recognises the file node was told to run', () => {
+    const path = '/srv/app/src/ingest/run.ts';
+    assert.equal(isMain(pathToFileURL(path).href, path), true);
+  });
+
+  it('does not fire for a module that was merely imported', () => {
+    assert.equal(isMain(pathToFileURL('/srv/app/src/ingest/probe.ts').href, '/srv/app/cli.js'), false);
+  });
+
+  it('handles paths that need URL encoding', () => {
+    // The CLIs printed nothing on Windows because "file://" + argv[1] built
+    // "file://D:\a\run.ts" rather than "file:///D:/a/run.ts". A path with a
+    // space reproduces the same mismatch on any platform.
+    const path = '/srv/my app/src/ingest/run.ts';
+    const href = pathToFileURL(path).href;
+    assert.equal(isMain(href, path), true);
+    assert.notEqual(href, `file://${path}`, 'concatenation must not be treated as equivalent');
+  });
+
+  it('is false when node was given no script', () => {
+    assert.equal(isMain('file:///srv/app/run.js', undefined), false);
   });
 });
 
