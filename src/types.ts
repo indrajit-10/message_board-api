@@ -62,4 +62,6 @@ export interface MessageSource {
   load(): Promise<void>;
   topics(): Topic[];
   lastUpdated(): string | null;
+  /** True when serving placeholders because the real source could not be read. */
+  readonly degraded?: boolean;
 }

@@ -205,13 +205,15 @@ async function load() {
       fetch('/v1/categories').then((r) => r.json()),
     ]);
 
-    const live = health.source === 'store';
+    const live = health.degraded !== true;
     $('serving').innerHTML = `
-      <span class="tag ${live ? 'live' : ''}">${live ? 'ingested from the blog' : 'built-in fixtures'}</span>
+      <span class="tag ${live ? 'live' : ''}">${live ? 'from the blog' : 'PLACEHOLDERS — not the blog'}</span>
       <span><span class="k">topics</span> <span class="v">${health.topics}</span></span>
       <span><span class="k">messages</span> <span class="v">${health.messages}</span></span>
       <span><span class="k">last updated</span> <span class="v">${esc(health.last_updated ?? '—')}</span></span>
-      ${live ? '' : '<span class="k">Run <code>npm run ingest</code> to load real blog messages.</span>'}`;
+      ${live ? '' : `<span class="k">${health.source === 'fixture'
+        ? 'The blog has not been read. Stop the server and run <code>npm run dev:live</code>.'
+        : 'Reading the blog failed — check the terminal for the reason.'}</span>`}`;
 
     topics = cats.topics;
     $('nav').innerHTML = topics.map((t) => `

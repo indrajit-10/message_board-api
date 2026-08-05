@@ -185,6 +185,7 @@ export function createApp(source: MessageSource): Express {
     res.json({
       status: topics.length > 0 ? 'ok' : 'empty',
       source: source.name,
+      degraded: source.degraded === true,
       topics: topics.length,
       messages: topics.reduce((sum, t) => sum + t.messages.length, 0),
       last_updated: source.lastUpdated(),

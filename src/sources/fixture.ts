@@ -20,6 +20,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export class FixtureSource implements MessageSource {
   readonly name = 'fixture';
 
+  /** Fixtures are never the blog's messages. */
+  readonly degraded = true;
+
   #topics: Topic[] = [];
   #generatedAt: string | null = null;
 
