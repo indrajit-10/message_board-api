@@ -132,7 +132,7 @@ export function buildTopics(posts: RawPost[], rules: Rule[]) {
  * is meant to rescue — so if ingest produced no global fallback, borrow the
  * fixture one rather than ship a store that cannot answer.
  */
-async function ensureFallback(topics: Topic[]): Promise<boolean> {
+export async function ensureFallback(topics: Topic[]): Promise<boolean> {
   if (topics.some((t) => t.serves.includes('*'))) return false;
   const fixture = JSON.parse(await readFile(FIXTURES, 'utf8')) as { topics: Topic[] };
   const everyday = fixture.topics.find((t) => t.serves.includes('*'));

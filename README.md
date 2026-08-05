@@ -159,11 +159,32 @@ Label the list from `data.resolved.label`.
 
 ## Getting real messages
 
+Two ways to get them. Pick one.
+
+**Without an ingest step** — the server reads the blog itself at startup:
+
+```bash
+npm run dev:live
+```
+
+Nothing else to run and no data file. The first boot takes a few seconds while
+it crawls, after which requests are served from memory in single-digit
+milliseconds, and it re-reads the blog every six hours. If the blog cannot be
+reached it says so and uses the fixtures, so the API still answers.
+
+**With an ingest step** — crawl once, write a store, serve that:
+
 ```bash
 npm run probe                          # what does the blog expose?
 npm run ingest -- --dry-run --verbose  # what would be extracted, without writing
 npm run ingest -- --reset              # wipe the store and rebuild it
+npm run dev
 ```
+
+More to remember, but the messages are a file you can read, diff and roll back,
+boot is instant, and a blog outage cannot affect a restart. Prefer this once
+it is running somewhere real; `dev:live` is the shorter path while you are
+still looking at what comes out.
 
 Restart the API and it serves the store automatically — `/v1/health` will say
 `"source": "store"` with the ingest timestamp.
@@ -275,6 +296,7 @@ If extraction picks up junk or misses real messages, the filters are in
 | `MESSAGE_SOURCE` | Behaviour |
 |---|---|
 | `auto` (default) | Ingested store if `data/topics.json` exists, else fixtures |
+| `live` | Read the blog at startup, no store file (`npm run dev:live`) |
 | `store` | Ingested store only; fails to boot if it is missing |
 | `fixture` | Checked-in fixtures only |
 
@@ -299,6 +321,7 @@ src/
   sources/
     fixture.ts       checked-in fallback messages
     store.ts         ingested messages
+    live.ts          reads the blog at startup, no store file
     fixtures/        the fallback messages
   ingest/
     probe.ts         what does the blog expose?

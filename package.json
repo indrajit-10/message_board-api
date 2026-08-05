@@ -9,13 +9,15 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:live": "tsx watch src/index.ts --live",
     "prebuild": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc && node -e \"require('fs').cpSync('src','dist',{recursive:true,filter:(s)=>!s.endsWith('.ts')})\"",
     "start": "node dist/index.js",
     "probe": "tsx src/ingest/probe.ts",
     "ingest": "tsx src/ingest/run.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "start:live": "node dist/index.js --live"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
