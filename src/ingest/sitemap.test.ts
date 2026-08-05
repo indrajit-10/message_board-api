@@ -80,3 +80,45 @@ describe('finding pages the navigation does not link to', () => {
     assert.deepEqual(urls, []);
   });
 });
+
+/**
+ * Yoast splits by post type: posts in post-sitemap.xml, pages in
+ * page-sitemap.xml. A section built from pages is listed in neither the posts
+ * sitemap nor the posts API, so reading only the first sitemap that returns
+ * something loses it entirely.
+ */
+describe('a sitemap split across post types', () => {
+  let split: Server;
+  let splitBase: string;
+
+  before(async () => {
+    const app = express();
+    app.get('/post-sitemap.xml', (_q, r) =>
+      r.type('application/xml').send(`<?xml version="1.0"?>
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+          <url><loc>${splitBase}${SECTION}a-post-that-lives-here/</loc></url>
+        </urlset>`),
+    );
+    app.get('/page-sitemap.xml', (_q, r) =>
+      r.type('application/xml').send(`<?xml version="1.0"?>
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+          <url><loc>${splitBase}${SECTION}birthday/</loc></url>
+          <url><loc>${splitBase}${SECTION}anniversary/</loc></url>
+          <url><loc>${splitBase}${SECTION}sympathy/</loc></url>
+        </urlset>`),
+    );
+    split = app.listen(0);
+    await new Promise((resolve) => split.once('listening', resolve));
+    splitBase = `http://127.0.0.1:${(split.address() as AddressInfo).port}`;
+  });
+
+  after(() => split.close());
+
+  it('reads every sitemap, not just the first one that answers', async () => {
+    const urls = await discoverFromSitemap(splitBase, SECTION);
+    assert.equal(urls.length, 4, `expected posts and pages, got: ${urls.join(', ')}`);
+    assert.ok(urls.some((u) => u.endsWith('/a-post-that-lives-here/')), 'lost the posts sitemap');
+    assert.ok(urls.some((u) => u.endsWith('/birthday/')), 'lost the pages sitemap');
+    assert.ok(urls.some((u) => u.endsWith('/sympathy/')), 'lost the pages sitemap');
+  });
+});

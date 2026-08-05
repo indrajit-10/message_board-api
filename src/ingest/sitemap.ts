@@ -14,13 +14,23 @@ import { isUnderSection, normaliseUrl } from './crawl.js';
  * error, it just means the crawl falls back to following links.
  */
 
+/**
+ * Indexes first, then the per-type files Yoast and similar plugins publish.
+ *
+ * The per-type split is the important part: Yoast puts posts in
+ * post-sitemap.xml and pages in page-sitemap.xml, so a section built from
+ * WordPress pages is listed in neither the posts sitemap nor the posts API.
+ * Every one of these is read — stopping at the first that returns something
+ * is how you end up with only half a section.
+ */
 const WELL_KNOWN = [
   '/wp-sitemap.xml',
-  '/sitemap.xml',
   '/sitemap_index.xml',
   '/sitemap-index.xml',
-  '/post-sitemap.xml',
+  '/sitemap.xml',
   '/page-sitemap.xml',
+  '/post-sitemap.xml',
+  '/category-sitemap.xml',
 ];
 
 /** A sitemap index can list many children; cap the follow-up to stay polite. */
@@ -57,41 +67,40 @@ export async function discoverFromSitemap(
 
   const found = new Set<string>();
   const tried = new Set<string>();
-  let readAny = false;
-
-  for (const candidate of candidates) {
-    if (tried.has(candidate)) continue;
-    tried.add(candidate);
-
-    const res = await get(candidate);
-    if (!res.ok || !/xml/i.test(res.contentType)) continue;
-    readAny = true;
-
-    const { urls, isIndex } = locations(res.body);
-
-    if (isIndex) {
-      for (const child of urls.slice(0, MAX_CHILD_SITEMAPS)) {
-        if (tried.has(child)) continue;
-        tried.add(child);
-        const childRes = await get(child);
-        if (!childRes.ok) continue;
-        for (const url of locations(childRes.body).urls) collect(url);
-      }
-    } else {
-      for (const url of urls) collect(url);
-    }
-
-    // A sitemap that covered the section is enough; no need to try the rest.
-    if (found.size > 0) break;
-  }
+  const contributors: string[] = [];
 
   function collect(raw: string): void {
     const url = normaliseUrl(raw, base);
     if (url && isUnderSection(url, base, section)) found.add(url);
   }
 
-  if (!readAny) onProgress?.('  no sitemap found, following links only');
-  else onProgress?.(`  sitemap listed ${found.size} pages under the section`);
+  async function read(url: string): Promise<number> {
+    if (tried.has(url)) return 0;
+    tried.add(url);
+
+    const res = await get(url);
+    if (!res.ok || !/xml/i.test(res.contentType)) return 0;
+
+    const before = found.size;
+    const { urls, isIndex } = locations(res.body);
+
+    if (isIndex) {
+      for (const child of urls.slice(0, MAX_CHILD_SITEMAPS)) await read(child);
+    } else {
+      for (const url of urls) collect(url);
+    }
+    return found.size - before;
+  }
+
+  // Every candidate, not just the first that works: a site can split its
+  // sitemap by post type, and the section may live in more than one of them.
+  for (const candidate of candidates) {
+    const added = await read(candidate);
+    if (added > 0) contributors.push(`${new URL(candidate).pathname} (+${added})`);
+  }
+
+  if (found.size === 0) onProgress?.('  no sitemap listed this section, following links only');
+  else onProgress?.(`  sitemap listed ${found.size} pages: ${contributors.join(', ')}`);
 
   return [...found];
 }

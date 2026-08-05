@@ -1,6 +1,8 @@
 import * as cheerio from 'cheerio';
 import { DEFAULT_BASE, get, getJson } from './http.js';
 import { isMain } from './isMain.js';
+import { DEFAULT_SECTION } from './run.js';
+import { discoverFromSitemap } from './sitemap.js';
 
 /**
  * Reports what the blog actually exposes, so ingest is configured against
@@ -28,6 +30,8 @@ interface WpCategory {
 
 export interface ProbeReport {
   base: string;
+  section: string;
+  sitemapPages: string[];
   robots: { status: number; disallows: string[] };
   wpJson: { available: boolean; status: number; postCount: number | null };
   feed: { available: boolean; status: number };
@@ -58,7 +62,7 @@ function sampleText($: cheerio.CheerioAPI, selector: string, n: number): string[
     .filter(Boolean);
 }
 
-export async function probe(base = DEFAULT_BASE): Promise<ProbeReport> {
+export async function probe(base = DEFAULT_BASE, section = DEFAULT_SECTION): Promise<ProbeReport> {
   const robotsRes = await get(`${base}/robots.txt`);
   const disallows = robotsRes.ok
     ? robotsRes.body
@@ -87,8 +91,12 @@ export async function probe(base = DEFAULT_BASE): Promise<ProbeReport> {
     };
   }
 
+  const sitemapPages = await discoverFromSitemap(base, section);
+
   return {
     base,
+    section,
+    sitemapPages,
     robots: { status: robotsRes.status, disallows },
     wpJson: {
       available: Boolean(posts.data),
@@ -118,6 +126,14 @@ function print(report: ProbeReport): void {
     `wp-json           ${report.wpJson.available ? 'YES' : 'no'}  (HTTP ${report.wpJson.status})`,
   );
   line(`feed              ${report.feed.available ? 'YES' : 'no'}  (HTTP ${report.feed.status})`);
+  line();
+
+  line(`section           ${report.section}`);
+  line(`  sitemap lists    ${report.sitemapPages.length} pages under it`);
+  for (const url of report.sitemapPages.slice(0, 25)) line(`    ${new URL(url).pathname}`);
+  if (report.sitemapPages.length > 25) {
+    line(`    … and ${report.sitemapPages.length - 25} more`);
+  }
   line();
 
   if (report.categories.length) {
@@ -150,14 +166,31 @@ function print(report: ProbeReport): void {
     line();
   }
 
-  if (!report.wpJson.available && !report.feed.available) {
-    line('Neither wp-json nor the feed responded. Either the host blocked this');
-    line('request, or both are disabled — check the status codes above.');
-  } else if (report.wpJson.available) {
-    line('wp-json works. Run: npm run ingest -- --dry-run');
+  // Ingest crawls the section by default, so the sitemap matters more than
+  // the API here — say what will actually happen, not what an API can do.
+  // A blocked host answers everything with the same error, so "no sitemap" and
+  // "cannot reach the site" look identical unless every probe is considered
+  // together. A proxy denial arrives as 403, not as a connection failure.
+  const nothingAnswered =
+    report.sitemapPages.length === 0 &&
+    !report.wpJson.available &&
+    !report.feed.available &&
+    !(report.robots.status >= 200 && report.robots.status < 300);
+
+  if (report.sitemapPages.length > 0) {
+    line(`The sitemap covers ${report.section}, so the crawl has a full list to work from.`);
+    line('Run: npm run ingest -- --reset --dry-run');
+  } else if (nothingAnswered) {
+    line(`Nothing on ${report.base} answered — robots.txt came back ${report.robots.status || 'unreachable'}.`);
+    line('The host is refusing this client, or a proxy or firewall is in the way.');
+    line('Ingest cannot work until a plain `curl` to that address succeeds.');
   } else {
-    line('Only the feed works. It carries fewer posts than wp-json but ingest');
-    line('will fall back to it automatically. Run: npm run ingest -- --dry-run');
+    line(`No sitemap listed ${report.section}. The crawl will still follow links`);
+    line('from the section index, which reaches less but usually still works.');
+    line('Run: npm run ingest -- --reset --dry-run');
+    if (report.wpJson.available) {
+      line('wp-json also responded, so --transport wp-json is an alternative.');
+    }
   }
 }
 
@@ -165,7 +198,10 @@ if (isMain(import.meta.url)) {
   const base = process.argv.includes('--base')
     ? (process.argv[process.argv.indexOf('--base') + 1] ?? DEFAULT_BASE)
     : DEFAULT_BASE;
-  const report = await probe(base);
+  const sectionArg = process.argv.includes('--section')
+    ? (process.argv[process.argv.indexOf('--section') + 1] ?? DEFAULT_SECTION)
+    : DEFAULT_SECTION;
+  const report = await probe(base, sectionArg);
   if (process.argv.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else print(report);
 }
