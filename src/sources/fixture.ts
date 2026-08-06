@@ -29,7 +29,9 @@ export class FixtureSource implements MessageSource {
   async load(): Promise<void> {
     const path = join(HERE, 'fixtures', 'topics.json');
     const parsed = JSON.parse(await readFile(path, 'utf8')) as FixtureFile;
-    this.#topics = parsed.topics;
+    // Stamped here rather than trusted from the file: this source is the
+    // placeholder source, so nothing it loads can be blog text.
+    this.#topics = parsed.topics.map((t) => ({ ...t, origin: 'placeholder' as const }));
     this.#generatedAt = parsed.generated_at;
   }
 

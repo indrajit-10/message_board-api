@@ -36,9 +36,17 @@ export type TopicMessage = string | { text: string; source_url?: string };
  *   "birthday/*"        any subcategory under a category
  *   "*"                 the global fallback
  */
+export type Origin = 'blog' | 'placeholder';
+
 export interface Topic {
   id: string;
   label: string;
+  /**
+   * Where the text came from. "placeholder" is written by us and must never
+   * reach a user: the whole point of the feature is that the wording is
+   * human-written by the blog's editors.
+   */
+  origin?: Origin;
   /** Attribution for messages that do not carry their own. */
   source_url: string;
   serves: string[];

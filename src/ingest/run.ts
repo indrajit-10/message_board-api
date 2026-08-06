@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Topic } from '../types.js';
@@ -12,7 +12,6 @@ import { discoverFromSitemap } from './sitemap.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_OUT = join(ROOT, 'data', 'topics.json');
-const FIXTURES = join(ROOT, 'src', 'sources', 'fixtures', 'topics.json');
 
 /** Where the card messages live. Everything under it is fair game. */
 export const DEFAULT_SECTION = '/what-to-write-in-a-card/';
@@ -137,6 +136,7 @@ export function buildTopics(posts: RawPost[], rules: Rule[], options: ExtractOpt
     topics.push({
       id: bucket.rule.id,
       label: bucket.rule.label,
+      origin: 'blog',
       source_url: messages[0]?.source_url ?? '',
       serves: bucket.rule.serves,
       messages,
@@ -149,17 +149,16 @@ export function buildTopics(posts: RawPost[], rules: Rule[], options: ExtractOpt
 }
 
 /**
- * The API resolves an uncovered card down to the topic serving "*". Without
- * one, those requests 503 and the CTA breaks on exactly the long-tail cards it
- * is meant to rescue — so if ingest produced no global fallback, borrow the
- * fixture one rather than ship a store that cannot answer.
+ * Reports whether the crawl produced a topic serving "*".
+ *
+ * It used to borrow the placeholder one when it had not, so an uncovered card
+ * still got an answer. That put text we wrote in front of users, which is
+ * exactly what this feature must never do — the value of it is that a person
+ * wrote the words. An uncovered card now returns nothing and the app hides
+ * the button, which is the honest outcome.
  */
-export async function ensureFallback(topics: Topic[]): Promise<boolean> {
-  if (topics.some((t) => t.serves.includes('*'))) return false;
-  const fixture = JSON.parse(await readFile(FIXTURES, 'utf8')) as { topics: Topic[] };
-  const everyday = fixture.topics.find((t) => t.serves.includes('*'));
-  if (everyday) topics.push(everyday);
-  return Boolean(everyday);
+export function hasGlobalFallback(topics: Topic[]): boolean {
+  return topics.some((t) => t.serves.includes('*'));
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -210,8 +209,9 @@ function report(summary: IngestSummary, args: Args): void {
   }
 
   if (summary.seededFallback) {
-    line('No ingested topic serves "*", so the fixture fallback was kept.');
-    line('Add a rule serving "*" once you know which posts are general-purpose.');
+    line('No crawled topic serves "*", so a card with no matching category will');
+    line('get nothing back and the app should hide the button. Point the everyday');
+    line('rule in rules.json at whichever pages are general-purpose to fix it.');
     line();
   }
 
@@ -272,9 +272,7 @@ async function main(): Promise<void> {
     ...(args.minLength === undefined ? {} : { minLength: args.minLength }),
     ...(args.maxLength === undefined ? {} : { maxLength: args.maxLength }),
   });
-  const seededFallback = await ensureFallback(built.topics);
-  // Re-sort: a seeded fallback is appended after buildTopics has ordered them.
-  built.topics.sort((a, b) => b.messages.length - a.messages.length);
+  const seededFallback = !hasGlobalFallback(built.topics);
 
   const summary: IngestSummary = {
     transport,

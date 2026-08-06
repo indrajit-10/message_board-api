@@ -29,7 +29,8 @@ export class StoreSource implements MessageSource {
     if (!Array.isArray(parsed.topics) || parsed.topics.length === 0) {
       throw new Error(`${this.path} contains no topics — re-run "npm run ingest".`);
     }
-    this.#topics = parsed.topics;
+    // A topic without an explicit origin came from this pipeline's crawl.
+    this.#topics = parsed.topics.map((t) => ({ ...t, origin: t.origin ?? ('blog' as const) }));
     this.#generatedAt = parsed.generated_at;
   }
 

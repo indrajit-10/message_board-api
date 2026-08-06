@@ -7,14 +7,32 @@ import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { createApp } from './app.js';
 import { FixtureSource, StoreSource } from './sources/index.js';
+import type { MessageSource } from './types.js';
 
 let server: Server;
 let base: string;
 
+/**
+ * The fixture text, presented as though it had come from the blog.
+ *
+ * The suites below are about selection, the fallback chain and exclude — not
+ * about where the words came from. Stamping the origin lets them run through
+ * the same strict path production uses, instead of being waved through by a
+ * flag that production must never set.
+ */
+function asIngested(fixtures: FixtureSource): MessageSource {
+  return {
+    name: 'store',
+    load: async () => {},
+    topics: () => fixtures.topics().map((t) => ({ ...t, origin: 'blog' as const })),
+    lastUpdated: () => fixtures.lastUpdated(),
+  };
+}
+
 before(async () => {
-  const source = new FixtureSource();
-  await source.load();
-  server = createApp(source).listen(0);
+  const fixtures = new FixtureSource();
+  await fixtures.load();
+  server = createApp(asIngested(fixtures)).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -149,7 +167,7 @@ describe('supporting endpoints', () => {
     const res = await fetch(`${base}/v1/health`);
     const body = (await res.json()) as { status: string; source: string; messages: number };
     assert.equal(body.status, 'ok');
-    assert.equal(body.source, 'fixture');
+    assert.equal(body.source, 'store');
     assert.ok(body.messages > 0);
   });
 
@@ -316,5 +334,64 @@ describe('serving an ingested store', () => {
     const path = join(dir, 'topics.json');
     await writeFile(path, JSON.stringify({ generated_at: 'x', topics: [] }));
     await assert.rejects(() => new StoreSource(path).load(), /no topics/);
+  });
+});
+
+/**
+ * The feature exists because the wording is human-written. Text we wrote must
+ * never reach a user, so these lock the door: fixtures are loaded, and every
+ * read path must still refuse to hand them out.
+ */
+describe('refusing to serve anything we wrote ourselves', () => {
+  let strict: Server;
+  let strictBase: string;
+
+  before(async () => {
+    const source = new FixtureSource();
+    await source.load();
+    strict = createApp(source).listen(0);
+    await new Promise((resolve) => strict.once('listening', resolve));
+    strictBase = `http://127.0.0.1:${(strict.address() as AddressInfo).port}`;
+  });
+
+  after(() => strict.close());
+
+  it('serves no messages at all when only placeholders are loaded', async () => {
+    const res = await fetch(`${strictBase}/v1/messages?category=birthday&subcategory=friends`);
+    const body = (await res.json()) as MessagesBody & { unavailable_reason?: string };
+    assert.equal(res.status, 200, 'the app needs a clean answer, not an error');
+    assert.equal(body.count, 0);
+    assert.deepEqual(body.messages, []);
+    assert.equal(body.unavailable_reason, 'no_blog_messages_loaded');
+  });
+
+  it('offers no categories built from placeholders', async () => {
+    const body = (await (await fetch(`${strictBase}/v1/categories`)).json()) as { count: number };
+    assert.equal(body.count, 0);
+  });
+
+  it('finds nothing when searching placeholders', async () => {
+    const body = (await (await fetch(`${strictBase}/v1/search?q=birthday`)).json()) as {
+      total: number;
+    };
+    assert.equal(body.total, 0);
+  });
+
+  it('will not open a placeholder topic directly', async () => {
+    const res = await fetch(`${strictBase}/v1/topics/birthday-friends`);
+    assert.equal(res.status, 404);
+  });
+
+  it('reports the withheld count so a leak would be visible', async () => {
+    const body = (await (await fetch(`${strictBase}/v1/health`)).json()) as {
+      status: string;
+      messages: number;
+      placeholder_messages: number;
+      serving_placeholders: boolean;
+    };
+    assert.equal(body.status, 'no_blog_messages');
+    assert.equal(body.messages, 0, 'nothing servable');
+    assert.equal(body.placeholder_messages, 64, 'loaded but withheld');
+    assert.equal(body.serving_placeholders, false);
   });
 });

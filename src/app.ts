@@ -24,7 +24,27 @@ function fail(res: Response, status: number, code: string, message: string): voi
   res.status(status).json({ error: { code, message } });
 }
 
-export function createApp(source: MessageSource): Express {
+export interface AppOptions {
+  /**
+   * Serve placeholder text. Off, and it should stay off anywhere a user can
+   * see: the feature's whole value is that a person wrote the words, so a
+   * message we wrote is worse than no message at all.
+   */
+  allowPlaceholders?: boolean;
+}
+
+export function createApp(source: MessageSource, options: AppOptions = {}): Express {
+  const allowPlaceholders = options.allowPlaceholders === true;
+
+  /**
+   * The only topics anyone is allowed to be served. Filtering here rather than
+   * at the source means every endpoint inherits it — messages, search, browse
+   * and the topic view cannot disagree about what is servable.
+   */
+  const servable = () =>
+    allowPlaceholders
+      ? source.topics()
+      : source.topics().filter((t) => t.origin !== 'placeholder');
   const app = express();
   app.use(cors());
   app.disable('x-powered-by');
@@ -77,9 +97,25 @@ export function createApp(source: MessageSource): Express {
         .filter(Boolean),
     );
 
-    const resolution = resolveTopic(source.topics(), category, subcategory);
+    const resolution = resolveTopic(servable(), category, subcategory);
+    // No blog messages cover this card. Answer plainly with an empty list so
+    // the app can hide the button, rather than inventing something to show.
     if (!resolution) {
-      fail(res, 503, 'no_messages', 'No messages are loaded. Check /v1/health.');
+      res.set('Cache-Control', 'no-store');
+      res.json({
+        category,
+        subcategory: subcategory ?? null,
+        resolved: null,
+        count: 0,
+        messages: [],
+        has_more: false,
+        wrapped: false,
+        // Servable, not loaded: withheld placeholders are loaded but can never
+        // answer, so counting them here would report the wrong cause.
+        unavailable_reason: servable().length
+          ? 'no_blog_messages_for_this_card'
+          : 'no_blog_messages_loaded',
+      });
       return;
     }
 
@@ -110,8 +146,8 @@ export function createApp(source: MessageSource): Express {
   app.get('/v1/categories', (_req: Request, res: Response) => {
     res.set('Cache-Control', 'public, max-age=300');
     res.json({
-      count: source.topics().length,
-      topics: source.topics().map((t) => ({
+      count: servable().length,
+      topics: servable().map((t) => ({
         id: t.id,
         label: t.label,
         serves: t.serves,
@@ -126,7 +162,7 @@ export function createApp(source: MessageSource): Express {
    * what was extracted is worth serving.
    */
   app.get('/v1/topics/:id', (req: Request, res: Response) => {
-    const topic = source.topics().find((t) => t.id === req.params.id);
+    const topic = servable().find((t) => t.id === req.params.id);
     if (!topic) {
       fail(res, 404, 'unknown_topic', `No topic "${req.params.id}". See /v1/categories.`);
       return;
@@ -165,7 +201,7 @@ export function createApp(source: MessageSource): Express {
     const results: Array<Record<string, string>> = [];
     let total = 0;
 
-    for (const topic of source.topics()) {
+    for (const topic of servable()) {
       for (const message of toMessages(topic)) {
         if (!message.text.toLowerCase().includes(needle)) continue;
         total++;
@@ -180,14 +216,24 @@ export function createApp(source: MessageSource): Express {
   });
 
   app.get('/v1/health', (_req: Request, res: Response) => {
-    const topics = source.topics();
+    const count = (list: typeof source.topics extends () => infer T ? T : never) =>
+      (list as ReturnType<typeof source.topics>).reduce((sum, t) => sum + t.messages.length, 0);
+
+    const all = source.topics();
+    const blog = all.filter((t) => t.origin !== 'placeholder');
+    const placeholder = all.filter((t) => t.origin === 'placeholder');
+
     res.set('Cache-Control', 'no-store');
     res.json({
-      status: topics.length > 0 ? 'ok' : 'empty',
+      status: blog.length > 0 ? 'ok' : 'no_blog_messages',
       source: source.name,
       degraded: source.degraded === true,
-      topics: topics.length,
-      messages: topics.reduce((sum, t) => sum + t.messages.length, 0),
+      topics: blog.length,
+      messages: count(blog),
+      // Loaded but withheld. Should be 0 in production; anything else means
+      // text we wrote is one config flag away from a user.
+      placeholder_messages: count(placeholder),
+      serving_placeholders: allowPlaceholders,
       last_updated: source.lastUpdated(),
     });
   });
