@@ -1,7 +1,4 @@
-export const DEFAULT_BASE = 'https://blog.123greetings.com';
-
-const UA =
-  'message-board-api ingest (+https://github.com/indrajit-10/message_board-api)';
+const UA = 'message-board-api ingest (+https://github.com/indrajit-10/message_board-api)';
 
 export interface FetchResult {
   ok: boolean;
@@ -13,16 +10,16 @@ export interface FetchResult {
 
 /**
  * One polite GET: identifies itself, times out rather than hanging a build,
- * and never throws — callers get a status they can branch on. The ingest job
- * touches a lot of URLs in a row, so a single failure has to be a data point
- * rather than a crash.
+ * and never throws — callers get a status they can branch on. An ingest walks
+ * a list of URLs, so a single failure has to be a data point rather than a
+ * crash that loses the other forty.
  */
 export async function get(url: string, timeoutMs = 20_000): Promise<FetchResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
-      headers: { 'user-agent': UA, accept: '*/*' },
+      headers: { 'user-agent': UA, accept: 'text/html,*/*' },
       signal: controller.signal,
       redirect: 'follow',
     });
@@ -42,16 +39,6 @@ export async function get(url: string, timeoutMs = 20_000): Promise<FetchResult>
     };
   } finally {
     clearTimeout(timer);
-  }
-}
-
-export async function getJson<T>(url: string): Promise<{ data: T | null; res: FetchResult }> {
-  const res = await get(url);
-  if (!res.ok) return { data: null, res };
-  try {
-    return { data: JSON.parse(res.body) as T, res };
-  } catch {
-    return { data: null, res: { ...res, ok: false, error: 'response was not JSON' } };
   }
 }
 

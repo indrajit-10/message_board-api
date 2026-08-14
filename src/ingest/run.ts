@@ -1,44 +1,24 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Topic } from '../types.js';
-import { crawlSection } from './crawl.js';
-import { extractMessages, type ExtractOptions } from './extract.js';
-import { fetchPosts, type RawPost } from './fetchPosts.js';
-import { DEFAULT_BASE } from './http.js';
+import { type BuildResult, buildTopics, hasGlobalFallback, type PageOutcome } from './build.js';
+import { fetchDeclared } from './collect.js';
 import { isMain } from './isMain.js';
-import { loadRules, matchRule, type Rule } from './mapping.js';
-import { discoverFromSitemap } from './sitemap.js';
+import { loadManifest, type Manifest, MANIFEST_PATH, resolvePageUrl } from './manifest.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_OUT = join(ROOT, 'data', 'topics.json');
 
-/** Where the card messages live. Everything under it is fair game. */
-export const DEFAULT_SECTION = '/what-to-write-in-a-card/';
-
-/**
- * What the crawl is allowed to reach, as opposed to where it starts.
- *
- * The message pages sit at the site root — /birthday-messages/,
- * /messages-for-1st-birthday/ — while /what-to-write-in-a-card/ is the hub
- * that links to them. Bounding the crawl to the hub's own path would follow
- * none of them.
- */
-export const DEFAULT_SCOPE = '/';
-
 interface Args {
-  base: string;
+  manifest: string;
   out: string;
-  section: string;
-  scope: string;
-  transport: 'crawl' | 'wp-json';
-  limit?: number;
-  categorySlug?: string;
+  base?: string;
+  topic?: string;
+  delayMs?: number;
   dryRun: boolean;
   verbose: boolean;
   reset: boolean;
-  minLength?: number;
-  maxLength?: number;
+  strict: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -46,178 +26,131 @@ function parseArgs(argv: string[]): Args {
     const i = argv.indexOf(flag);
     return i === -1 ? undefined : argv[i + 1];
   };
-  const limit = value('--limit');
-  const transport = value('--transport') ?? 'crawl';
-  if (transport !== 'crawl' && transport !== 'wp-json') {
-    throw new Error(`--transport must be "crawl" or "wp-json", got "${transport}".`);
-  }
+  const delay = value('--delay');
   return {
-    base: value('--base') ?? DEFAULT_BASE,
+    manifest: value('--manifest') ?? MANIFEST_PATH,
     out: value('--out') ?? DEFAULT_OUT,
-    section: value('--section') ?? DEFAULT_SECTION,
-    scope: value('--scope') ?? DEFAULT_SCOPE,
-    transport,
-    limit: limit ? Number(limit) : undefined,
-    categorySlug: value('--category'),
+    ...(value('--base') ? { base: value('--base') as string } : {}),
+    ...(value('--topic') ? { topic: value('--topic') as string } : {}),
+    ...(delay ? { delayMs: Number(delay) } : {}),
     dryRun: argv.includes('--dry-run'),
     verbose: argv.includes('--verbose'),
     reset: argv.includes('--reset'),
-    ...(value('--min-length') ? { minLength: Number(value('--min-length')) } : {}),
-    ...(value('--max-length') ? { maxLength: Number(value('--max-length')) } : {}),
+    strict: argv.includes('--strict'),
   };
 }
 
-interface Bucket {
-  rule: Rule;
-  messages: Array<{ text: string; source_url: string }>;
-  postCount: number;
+/** Point every declared page at a different host, for staging or a local copy. */
+export function withBase(manifest: Manifest, base: string): Manifest {
+  return {
+    ...manifest,
+    base,
+    topics: manifest.topics.map((t) => ({
+      ...t,
+      pages: t.pages.map((p) => ({
+        ...p,
+        url: resolvePageUrl(base, new URL(p.url).pathname, `--base ${base}`),
+      })),
+    })),
+  };
 }
 
-export interface IngestSummary {
-  transport: string;
-  posts: number;
-  extracted: number;
-  kept: number;
-  topics: Topic[];
-  patterns: Record<string, number>;
-  unmapped: RawPost[];
-  empty: RawPost[];
-  rejected: Record<string, number>;
-  seededFallback: boolean;
-}
-
-/** Pure pipeline over already-fetched posts, so it can be tested without network. */
-export function buildTopics(posts: RawPost[], rules: Rule[], options: ExtractOptions = {}) {
-  const buckets = new Map<string, Bucket>();
-  const patterns: Record<string, number> = {};
-  const unmapped: RawPost[] = [];
-  const empty: RawPost[] = [];
-  const rejected: Record<string, number> = {};
-  let extracted = 0;
-
-  for (const post of posts) {
-    const result = extractMessages(post.html, options);
-    patterns[result.pattern] = (patterns[result.pattern] ?? 0) + 1;
-    extracted += result.messages.length;
-    for (const [reason, n] of Object.entries(result.rejected)) {
-      rejected[reason] = (rejected[reason] ?? 0) + n;
-    }
-
-    if (result.messages.length === 0) {
-      empty.push(post);
-      continue;
-    }
-
-    const rule = matchRule(post, rules);
-    if (!rule) {
-      unmapped.push(post);
-      continue;
-    }
-
-    let bucket = buckets.get(rule.id);
-    if (!bucket) {
-      bucket = { rule, messages: [], postCount: 0 };
-      buckets.set(rule.id, bucket);
-    }
-    bucket.postCount++;
-    for (const text of result.messages) bucket.messages.push({ text, source_url: post.link });
+export function onlyTopic(manifest: Manifest, id: string): Manifest {
+  const topic = manifest.topics.find((t) => t.id === id);
+  if (!topic) {
+    throw new Error(`No topic "${id}" in the manifest. Known ids are listed by: npm run verify`);
   }
-
-  // Posts overlap in content, so dedupe within each topic after merging.
-  const topics: Topic[] = [];
-  for (const bucket of buckets.values()) {
-    const seen = new Set<string>();
-    const messages = bucket.messages.filter((m) => {
-      const key = m.text.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    topics.push({
-      id: bucket.rule.id,
-      label: bucket.rule.label,
-      origin: 'blog',
-      source_url: messages[0]?.source_url ?? '',
-      serves: bucket.rule.serves,
-      messages,
-    });
-  }
-
-  topics.sort((a, b) => b.messages.length - a.messages.length);
-  const kept = topics.reduce((n, t) => n + t.messages.length, 0);
-  return { topics, patterns, unmapped, empty, extracted, kept, rejected };
-}
-
-/**
- * Reports whether the crawl produced a topic serving "*".
- *
- * It used to borrow the placeholder one when it had not, so an uncovered card
- * still got an answer. That put text we wrote in front of users, which is
- * exactly what this feature must never do — the value of it is that a person
- * wrote the words. An uncovered card now returns nothing and the app hides
- * the button, which is the honest outcome.
- */
-export function hasGlobalFallback(topics: Topic[]): boolean {
-  return topics.some((t) => t.serves.includes('*'));
+  return { ...manifest, topics: [topic] };
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-function report(summary: IngestSummary, args: Args): void {
+function byStatus(outcomes: PageOutcome[]) {
+  return {
+    ok: outcomes.filter((o) => o.status === 'ok'),
+    fallback: outcomes.filter((o) => o.status === 'fallback'),
+    empty: outcomes.filter((o) => o.status === 'empty'),
+    unreachable: outcomes.filter((o) => o.status === 'unreachable'),
+  };
+}
+
+/**
+ * Everything that did not go cleanly gets named, with the manifest edit that
+ * would fix it. A page silently contributing nothing is exactly how the old
+ * pipeline lost messages without anyone noticing.
+ */
+export function report(built: BuildResult, manifest: Manifest, verbose: boolean): void {
   const line = (s = '') => console.log(s);
+  const groups = byStatus(built.outcomes);
+  const total = built.outcomes.length;
 
   line();
-  line(`transport   ${summary.transport}`);
-  line(`posts       ${summary.posts}`);
-  line(
-    `markup      ${Object.entries(summary.patterns)
-      .sort((a, b) => b[1] - a[1])
-      .map(([p, n]) => `${p}=${n}`)
-      .join('  ')}`,
-  );
-  line(`extracted   ${summary.extracted} messages`);
-  line(`kept        ${summary.kept} after dedupe`);
-  // Anything the filters threw away, so a real message being dropped is
-  // visible rather than silently missing from the store.
-  const dropped = Object.entries(summary.rejected).sort((a, b) => b[1] - a[1]);
+  line(`pages       ${total} declared`);
+  if (groups.ok.length) line(`            ${groups.ok.length} ok`);
+  if (groups.fallback.length) line(`            ${groups.fallback.length} FALLBACK — declared selector found nothing`);
+  if (groups.empty.length) line(`            ${groups.empty.length} EMPTY — no messages at all`);
+  if (groups.unreachable.length) line(`            ${groups.unreachable.length} UNREACHABLE`);
+  line(`extracted   ${built.extracted} messages`);
+  line(`kept        ${built.kept} after dedupe`);
+
+  const dropped = Object.entries(built.rejected).sort((a, b) => b[1] - a[1]);
   if (dropped.length) {
     line(`rejected    ${dropped.map(([r, n]) => `${r}=${n}`).join('  ')}`);
-    line('            tune with --min-length / --max-length, or edit extract.ts');
+    line('            tune minLength / maxLength in the manifest, or edit extract.ts');
   }
   line();
 
-  line(`Topics (${summary.topics.length}):`);
-  for (const t of summary.topics) {
-    line(`  ${String(t.messages.length).padStart(5)}  ${t.id.padEnd(20)} ${t.serves.join(' ')}`);
+  line(`Topics (${built.topics.length} of ${manifest.topics.length} have messages):`);
+  for (const t of built.topics) {
+    line(`  ${String(t.messages.length).padStart(5)}  ${t.id.padEnd(22)} ${t.serves.join(' ')}`);
   }
   line();
 
-  if (summary.empty.length) {
-    line(`${plural(summary.empty.length, 'post')} yielded no messages:`);
-    for (const p of summary.empty.slice(0, 10)) line(`  ${p.slug}`);
-    if (summary.empty.length > 10) line(`  … and ${summary.empty.length - 10} more`);
-    line('  If these are message posts, the markup is one extract.ts does not read yet.');
+  if (groups.fallback.length) {
+    line(`${plural(groups.fallback.length, 'page')} fell back to guessing the markup:`);
+    for (const o of groups.fallback) {
+      line(`  ${o.url}`);
+      line(`      salvaged ${o.messages} via ${o.strategies.join('+')}, for ${o.topics.join(', ')}`);
+    }
+    line('  Fix: give these pages a "selector" in the manifest, or update defaults.selector.');
     line();
   }
 
-  if (summary.unmapped.length) {
-    line(`${plural(summary.unmapped.length, 'post')} had messages but no card mapping:`);
-    for (const p of summary.unmapped.slice(0, 15)) line(`  ${p.slug}`);
-    if (summary.unmapped.length > 15) line(`  … and ${summary.unmapped.length - 15} more`);
-    line('  Add rules to src/ingest/rules.json to bring these in.');
+  if (groups.empty.length) {
+    line(`${plural(groups.empty.length, 'page')} yielded no messages:`);
+    for (const o of groups.empty) line(`  ${o.url}  (for ${o.topics.join(', ')})`);
+    line('  Either not a message page, or the markup is one extract.ts does not read.');
     line();
   }
 
-  if (summary.seededFallback) {
-    line('No crawled topic serves "*", so a card with no matching category will');
-    line('get nothing back and the app should hide the button. Point the everyday');
-    line('rule in rules.json at whichever pages are general-purpose to fix it.');
+  if (groups.unreachable.length) {
+    line(`${plural(groups.unreachable.length, 'page')} could not be read:`);
+    for (const o of groups.unreachable) {
+      line(`  ${o.url}  ${o.error ?? `HTTP ${o.httpStatus}`}`);
+    }
+    line('  Fix: correct or remove these entries in the manifest.');
     line();
   }
 
-  if (args.verbose) {
+  if (built.topicsWithoutPages.length) {
+    const shown = built.topicsWithoutPages.slice(0, 12).join(', ');
+    const more = built.topicsWithoutPages.length - 12;
+    line(`${plural(built.topicsWithoutPages.length, 'topic')} have no pages declared:`);
+    line(`  ${shown}${more > 0 ? `, … and ${more} more` : ''}`);
+    line('  These serve nothing until you add page URLs. Run: npm run suggest');
+    line();
+  }
+
+  if (!hasGlobalFallback(built.topics)) {
+    line('No topic serves "*", so a card with no matching category gets nothing');
+    line('back and the app should hide the button. Add pages to a general-purpose');
+    line('topic whose "serves" includes "*" to cover that case.');
+    line();
+  }
+
+  if (verbose) {
     line('Sample of what was kept:');
-    for (const t of summary.topics.slice(0, 3)) {
+    for (const t of built.topics.slice(0, 3)) {
       line(`  [${t.id}]`);
       for (const m of t.messages.slice(0, 3)) {
         line(`    - ${(typeof m === 'string' ? m : m.text).slice(0, 100)}`);
@@ -227,70 +160,31 @@ function report(summary: IngestSummary, args: Args): void {
   }
 }
 
-async function collect(args: Args): Promise<{ posts: RawPost[]; transport: string }> {
-  const onProgress = (m: string) => console.log(m);
-
-  if (args.transport === 'wp-json') {
-    return fetchPosts({
-      base: args.base,
-      ...(args.limit === undefined ? {} : { limit: args.limit }),
-      ...(args.categorySlug === undefined ? {} : { categorySlug: args.categorySlug }),
-      onProgress,
-    });
-  }
-
-  const seeds = await discoverFromSitemap(args.base, args.scope, onProgress);
-  const pages = await crawlSection({
-    base: args.base,
-    section: args.section,
-    scope: args.scope,
-    seeds,
-    ...(args.limit === undefined ? {} : { maxPages: args.limit }),
-    onProgress,
-  });
-  return { posts: pages, transport: `crawl ${args.section} scope=${args.scope}` };
-}
-
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  let manifest = await loadManifest(args.manifest);
+  if (args.base) manifest = withBase(manifest, args.base);
+  if (args.topic) manifest = onlyTopic(manifest, args.topic);
 
   if (args.reset) {
     await rm(args.out, { force: true });
     console.log(`Removed ${args.out}`);
   }
 
-  console.log(
-    args.transport === 'crawl'
-      ? `Crawling ${args.base}${args.section}, following links across ${args.scope}`
-      : `Ingesting from ${args.base}${args.categorySlug ? ` [${args.categorySlug}]` : ''}`,
-  );
-
-  const rules = await loadRules();
-  const { posts, transport } = await collect(args);
-
-  const built = buildTopics(posts, rules, {
-    ...(args.minLength === undefined ? {} : { minLength: args.minLength }),
-    ...(args.maxLength === undefined ? {} : { maxLength: args.maxLength }),
+  const fetched = await fetchDeclared(manifest, {
+    ...(args.delayMs === undefined ? {} : { delayMs: args.delayMs }),
+    onProgress: (m) => console.log(m),
   });
-  const seededFallback = !hasGlobalFallback(built.topics);
 
-  const summary: IngestSummary = {
-    transport,
-    posts: posts.length,
-    extracted: built.extracted,
-    kept: built.kept,
-    topics: built.topics,
-    patterns: built.patterns,
-    unmapped: built.unmapped,
-    empty: built.empty,
-    rejected: built.rejected,
-    seededFallback,
-  };
+  const built = buildTopics(manifest, fetched);
+  report(built, manifest, args.verbose);
 
-  report(summary, args);
+  const failures = built.outcomes.filter((o) => o.status !== 'ok').length;
 
   if (args.dryRun) {
     console.log('--dry-run, nothing written. Drop the flag to write the store.');
+    if (args.strict && failures > 0) process.exitCode = 1;
     return;
   }
 
@@ -306,8 +200,8 @@ async function main(): Promise<void> {
     `${JSON.stringify(
       {
         generated_at: new Date().toISOString(),
-        source: args.base,
-        transport,
+        source: manifest.base,
+        manifest: args.manifest,
         topics: built.topics,
       },
       null,
@@ -316,11 +210,18 @@ async function main(): Promise<void> {
   );
   console.log(`Wrote ${args.out}`);
   console.log('Restart the API to serve it (it picks up the store automatically).');
+
+  // --strict is for CI: a fallback or a 404 means the site moved under us, and
+  // that should break a scheduled run rather than quietly shrink the store.
+  if (args.strict && failures > 0) {
+    console.error(`\n--strict: ${plural(failures, 'page')} did not extract cleanly.`);
+    process.exitCode = 1;
+  }
 }
 
 if (isMain(import.meta.url)) {
-  // A blocked host or a moved endpoint is an expected outcome here, not a bug
-  // in this script — say what happened and what to try, without a stack trace.
+  // A moved page or a blocked host is an expected outcome here, not a bug in
+  // this script — say what happened, without a stack trace.
   try {
     await main();
   } catch (err) {

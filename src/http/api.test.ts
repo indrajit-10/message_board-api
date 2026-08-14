@@ -5,9 +5,9 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { createApp } from './app.js';
-import { FixtureSource, StoreSource } from './sources/index.js';
-import type { MessageSource } from './types.js';
+import { createApp } from './createApp.js';
+import { FixtureSource, StoreSource } from '../sources/index.js';
+import type { MessageSource } from '../core/types.js';
 
 let server: Server;
 let base: string;
@@ -267,7 +267,7 @@ describe('serving an ingested store', () => {
       JSON.stringify({
         generated_at: '2026-08-04T09:00:00Z',
         source: 'https://blog.example.com',
-        transport: 'wp-json',
+        manifest: 'manifest.json',
         topics: [
           {
             id: 'birthday-friends',

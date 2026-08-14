@@ -1,33 +1,36 @@
 import * as cheerio from 'cheerio';
 
 /**
- * Pulls individual card messages out of a post's HTML.
+ * Pulls individual card messages out of a page's HTML.
  *
- * Blog posts do not agree on how to mark up a list of wishes — some use
- * <li>, some numbered <p>, some <blockquote>, some one <p> broken by <br>.
- * Rather than commit to one and break on the rest, every strategy runs and
- * the one yielding the most usable messages wins. `pattern` in the result
- * says which, so a sudden change in the mix is visible instead of silent.
+ * The manifest declares the selector that holds the messages, because we own
+ * the site and therefore know. The guess-work below only runs when that
+ * selector comes back empty, and when it does the result says so — a theme
+ * change becomes a named failure on one page instead of a quiet shortfall
+ * spread across the whole store.
  */
 
 export interface ExtractOptions {
-  minLength?: number;
-  maxLength?: number;
+  selector: string;
+  minLength: number;
+  maxLength: number;
 }
+
+export type ExtractVia = 'declared' | 'fallback' | 'none';
 
 export interface ExtractResult {
   messages: string[];
-  pattern: string;
+  via: ExtractVia;
+  /** Which fallback strategies contributed, when `via` is "fallback". */
+  strategies: string[];
   candidates: number;
   rejected: Record<string, number>;
 }
 
-const DEFAULTS = { minLength: 15, maxLength: 400 };
-
 /**
  * Phrases that mark navigation, calls to action and housekeeping rather than
- * something a person would write in a card. These sit in the same <li> and <p>
- * tags as the real messages, so length alone will not separate them.
+ * something a person would write in a card. These sit in the same tags as the
+ * real messages, so length alone will not separate them.
  */
 const BOILERPLATE = [
   'click here',
@@ -66,7 +69,10 @@ function clean(raw: string): string {
 }
 
 /** Returns a reason string when the text is not a card message, else null. */
-export function rejectReason(text: string, opts: Required<ExtractOptions>): string | null {
+export function rejectReason(
+  text: string,
+  opts: { minLength: number; maxLength: number },
+): string | null {
   if (text.length < opts.minLength) return 'too_short';
   if (text.length > opts.maxLength) return 'too_long';
 
@@ -88,15 +94,44 @@ export function rejectReason(text: string, opts: Required<ExtractOptions>): stri
 
 /**
  * A list item that is just a link is a table of contents entry, not something
- * anyone writes in a card. Section index pages are built entirely from these
- * ("Anniversary messages", "Get well soon messages"), and they are long enough
- * to clear the length filter, so they have to be recognised by shape instead.
+ * anyone writes in a card. Index pages are built entirely from these, and they
+ * are long enough to clear the length filter, so they have to be recognised by
+ * shape instead.
  */
-function isMostlyLink(node: cheerio.Cheerio<never>): boolean {
+function isMostlyLink($: cheerio.CheerioAPI, el: never): boolean {
+  const node = $(el);
   const text = node.text().replace(/\s+/g, ' ').trim();
   if (!text) return true;
   const linked = node.find('a').text().replace(/\s+/g, ' ').trim();
   return linked.length >= text.length * 0.8;
+}
+
+/** Page furniture that holds list items and paragraphs but never a card message. */
+const CHROME =
+  'script, style, noscript, iframe, form, figure, figcaption, ' +
+  'nav, header, footer, aside, ' +
+  '.nav, .navbar, .menu, .navigation, .sidebar, .widget, .breadcrumb, .breadcrumbs, ' +
+  '.comments, #comments, .comment-list, .pagination, .pager, ' +
+  '.sharedaddy, .share, .social, .related, .related-posts, .tags, .meta, .site-header, .site-footer';
+
+const CONTENT_REGIONS = [
+  '.entry-content',
+  '.post-content',
+  '.article-content',
+  'article',
+  'main',
+  '#content',
+  '.content',
+];
+
+function contentRegion($: cheerio.CheerioAPI): cheerio.Cheerio<never> {
+  for (const selector of CONTENT_REGIONS) {
+    const found = $(selector).first();
+    if (found.length && found.text().trim().length > 200) {
+      return found as unknown as cheerio.Cheerio<never>;
+    }
+  }
+  return $('body') as unknown as cheerio.Cheerio<never>;
 }
 
 interface Strategy {
@@ -104,15 +139,21 @@ interface Strategy {
   collect: ($: cheerio.CheerioAPI, region: cheerio.Cheerio<never>) => string[];
 }
 
-const STRATEGIES: Strategy[] = [
+/**
+ * The old pipeline's guess-work, kept only as a safety net.
+ *
+ * Reaching these means the declared selector found nothing, which is a
+ * manifest to fix rather than a mode to run in — so whatever they salvage is
+ * reported as a fallback rather than counted as a normal ingest.
+ */
+const FALLBACK_STRATEGIES: Strategy[] = [
   {
     name: 'list',
-    // Skip list items that only wrap a nested list — their text is the children's.
     collect: ($, region) =>
       region
         .find('li')
         .filter((_, el) => $(el).children('ul, ol').length === 0)
-        .filter((_, el) => !isMostlyLink($(el) as unknown as cheerio.Cheerio<never>))
+        .filter((_, el) => !isMostlyLink($, el as never))
         .map((_, el) => $(el).text())
         .get(),
   },
@@ -126,7 +167,6 @@ const STRATEGIES: Strategy[] = [
   },
   {
     name: 'linebreak',
-    // One paragraph holding several messages separated by <br>.
     collect: ($, region) => {
       const out: string[] = [];
       region.find('p').each((_, el) => {
@@ -143,113 +183,97 @@ const STRATEGIES: Strategy[] = [
     collect: ($, region) =>
       region
         .find('p')
-        .filter((_, el) => !isMostlyLink($(el) as unknown as cheerio.Cheerio<never>))
+        .filter((_, el) => !isMostlyLink($, el as never))
         .map((_, el) => $(el).text())
         .get(),
   },
 ];
 
-/** Page furniture that holds <li> and <p> but never a card message. */
-const CHROME =
-  'script, style, noscript, iframe, form, figure, figcaption, ' +
-  'nav, header, footer, aside, ' +
-  '.nav, .navbar, .menu, .navigation, .sidebar, .widget, .breadcrumb, .breadcrumbs, ' +
-  '.comments, #comments, .comment-list, .pagination, .pager, ' +
-  '.sharedaddy, .share, .social, .related, .related-posts, .tags, .meta, .site-header, .site-footer';
-
-/**
- * Where the messages live on a page.
- *
- * A crawled page is the whole document — a nav menu alone can contribute
- * thirty <li> items, which would out-vote the real list and win the strategy
- * scoring outright. Narrowing first is what makes crawling a full page as
- * reliable as reading a post body from the API. When nothing matches (an API
- * content fragment has no <article>), <body> is already the content.
- */
-const CONTENT_REGIONS = [
-  '.entry-content',
-  '.post-content',
-  '.article-content',
-  'article',
-  'main',
-  '#content',
-  '.content',
-];
-
-export function contentRegion($: cheerio.CheerioAPI): cheerio.Cheerio<never> {
-  $(CHROME).remove();
-  for (const selector of CONTENT_REGIONS) {
-    const found = $(selector).first();
-    if (found.length && found.text().trim().length > 200) {
-      return found as unknown as cheerio.Cheerio<never>;
-    }
-  }
-  return $('body') as unknown as cheerio.Cheerio<never>;
-}
-
-/**
- * <li>, <blockquote> and <br>-split paragraphs each mark a list of wishes
- * outright. A page can use more than one — a numbered list followed by a few
- * pull-quotes — so all three are kept and merged.
- *
- * Bare <p> is different: on a page with no message list it holds the messages,
- * but on a page that has one it holds the surrounding prose. So it only runs
- * when the structured markup found nothing, rather than adding intro
- * paragraphs to every page that has a list.
- */
+/** Bare <p> holds prose on a page that has a message list, so it goes last. */
 const STRUCTURED = new Set(['list', 'blockquote', 'linebreak']);
 
-export function extractMessages(html: string, options: ExtractOptions = {}): ExtractResult {
-  const opts = { ...DEFAULTS, ...options };
-  const $ = cheerio.load(html);
-  const region = contentRegion($);
+class Sieve {
+  readonly messages: string[] = [];
+  readonly rejected: Record<string, number> = {};
+  candidates = 0;
 
-  const rejected: Record<string, number> = {};
-  const seen = new Set<string>();
-  const messages: string[] = [];
-  const used: string[] = [];
-  let candidates = 0;
+  readonly #seen = new Set<string>();
 
-  const harvest = (strategy: Strategy): number => {
-    const raw = strategy.collect($, region);
-    candidates += raw.length;
+  constructor(private readonly opts: { minLength: number; maxLength: number }) {}
+
+  /** Returns how many of these candidates survived. */
+  take(raw: string[]): number {
+    this.candidates += raw.length;
     let kept = 0;
 
     for (const candidate of raw) {
       const text = clean(candidate);
-      const reason = rejectReason(text, opts);
+      const reason = rejectReason(text, this.opts);
       if (reason) {
-        rejected[reason] = (rejected[reason] ?? 0) + 1;
+        this.rejected[reason] = (this.rejected[reason] ?? 0) + 1;
         continue;
       }
       const key = text.toLowerCase();
-      if (seen.has(key)) {
-        rejected.duplicate = (rejected.duplicate ?? 0) + 1;
+      if (this.#seen.has(key)) {
+        this.rejected.duplicate = (this.rejected.duplicate ?? 0) + 1;
         continue;
       }
-      seen.add(key);
-      messages.push(text);
+      this.#seen.add(key);
+      this.messages.push(text);
       kept++;
     }
-
-    if (kept > 0) used.push(strategy.name);
     return kept;
-  };
+  }
+}
 
-  for (const strategy of STRATEGIES) {
-    if (STRUCTURED.has(strategy.name)) harvest(strategy);
+export function extractMessages(html: string, options: ExtractOptions): ExtractResult {
+  const $ = cheerio.load(html);
+  $(CHROME).remove();
+
+  const sieve = new Sieve(options);
+
+  // What the manifest says holds the messages.
+  let declared: string[] = [];
+  try {
+    declared = $(options.selector)
+      .map((_, el) => $(el).text())
+      .get();
+  } catch (err) {
+    throw new Error(
+      `Selector "${options.selector}" is not valid CSS: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
-  if (messages.length === 0) {
-    for (const strategy of STRATEGIES) {
-      if (!STRUCTURED.has(strategy.name)) harvest(strategy);
+  if (sieve.take(declared) > 0) {
+    return {
+      messages: sieve.messages,
+      via: 'declared',
+      strategies: [],
+      candidates: sieve.candidates,
+      rejected: sieve.rejected,
+    };
+  }
+
+  // Declared selector came up empty. Salvage what we can, and say so.
+  const region = contentRegion($);
+  const used: string[] = [];
+
+  for (const strategy of FALLBACK_STRATEGIES) {
+    if (!STRUCTURED.has(strategy.name)) continue;
+    if (sieve.take(strategy.collect($, region)) > 0) used.push(strategy.name);
+  }
+  if (sieve.messages.length === 0) {
+    for (const strategy of FALLBACK_STRATEGIES) {
+      if (STRUCTURED.has(strategy.name)) continue;
+      if (sieve.take(strategy.collect($, region)) > 0) used.push(strategy.name);
     }
   }
 
   return {
-    messages,
-    pattern: used.length ? used.join('+') : 'none',
-    candidates,
-    rejected,
+    messages: sieve.messages,
+    via: sieve.messages.length > 0 ? 'fallback' : 'none',
+    strategies: used,
+    candidates: sieve.candidates,
+    rejected: sieve.rejected,
   };
 }

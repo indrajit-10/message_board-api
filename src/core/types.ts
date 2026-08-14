@@ -22,11 +22,18 @@ export interface Message {
 export type MatchKind = 'exact' | 'category' | 'generic';
 
 /**
- * A message as stored. Ingest merges several blog posts into one topic, so a
- * message can carry the post it came from; fixtures write a bare string and
+ * A message as stored. A topic can draw from several pages on the blog, so a
+ * message can carry the page it came from; fixtures write a bare string and
  * inherit the topic's `source_url`.
  */
 export type TopicMessage = string | { text: string; source_url?: string };
+
+/**
+ * Where the text came from. "placeholder" is written by us and must never
+ * reach a user: the whole point of the feature is that the wording is
+ * human-written by the blog's editors.
+ */
+export type Origin = 'blog' | 'placeholder';
 
 /**
  * A pool of messages for one subject, plus the card taxonomy it covers.
@@ -36,16 +43,9 @@ export type TopicMessage = string | { text: string; source_url?: string };
  *   "birthday/*"        any subcategory under a category
  *   "*"                 the global fallback
  */
-export type Origin = 'blog' | 'placeholder';
-
 export interface Topic {
   id: string;
   label: string;
-  /**
-   * Where the text came from. "placeholder" is written by us and must never
-   * reach a user: the whole point of the feature is that the wording is
-   * human-written by the blog's editors.
-   */
   origin?: Origin;
   /** Attribution for messages that do not carry their own. */
   source_url: string;
@@ -61,9 +61,9 @@ export interface Resolution {
 /**
  * Where topics come from.
  *
- * Stage 0 is `FixtureSource`. Stage 1 swaps in a source backed by the ingest
- * job without touching routes, selection, or any client — that is the whole
- * reason this boundary exists.
+ * Every source hands back the same `Topic[]`, so routes, selection and the
+ * clients cannot tell a store from fixtures from a live read — which is what
+ * lets the backing change without touching anything above it.
  */
 export interface MessageSource {
   readonly name: string;

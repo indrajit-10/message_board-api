@@ -1,15 +1,11 @@
-import { crawlSection } from '../ingest/crawl.js';
-import { DEFAULT_BASE } from '../ingest/http.js';
-import { loadRules } from '../ingest/mapping.js';
-import { discoverFromSitemap } from '../ingest/sitemap.js';
-import { buildTopics, DEFAULT_SCOPE, DEFAULT_SECTION } from '../ingest/run.js';
-import type { MessageSource, Topic } from '../types.js';
+import { buildTopics } from '../ingest/build.js';
+import { fetchDeclared } from '../ingest/collect.js';
+import { loadManifest, type Manifest } from '../ingest/manifest.js';
+import type { MessageSource, Topic } from '../core/types.js';
 import { FixtureSource } from './fixture.js';
 
 export interface LiveOptions {
-  base?: string;
-  section?: string;
-  scope?: string;
+  manifestPath?: string;
   /** How often to re-read the blog. Set to 0 to read once at startup. */
   refreshMs?: number;
   quiet?: boolean;
@@ -18,18 +14,15 @@ export interface LiveOptions {
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
 /**
- * Reads the blog at startup and holds the result in memory — no ingest
- * command, no store file.
+ * Reads the manifest's pages at startup and holds the result in memory — no
+ * ingest command, no store file.
  *
- * The crawl still happens; it just happens for you. That costs a slower boot
- * and messages that are only as fresh as the last refresh, and buys one less
- * step to remember. What it does not change is that a request never waits on
- * the blog: serving straight from a live fetch would put a remote site in the
- * path of a button inside the card flow, and one slow response there reads as
- * a broken feature.
+ * What it does not change is that a request never waits on the blog: serving
+ * straight from a live fetch would put a remote site in the path of a button
+ * inside the card flow, and one slow response there reads as a broken feature.
  *
- * If the blog cannot be reached the fixtures are used instead, so the API
- * still boots and the CTA still answers.
+ * If the pages cannot be read the fixtures are used instead, so the API still
+ * boots and `/v1/health` reports `degraded`.
  */
 export class LiveSource implements MessageSource {
   readonly name = 'live';
@@ -50,9 +43,7 @@ export class LiveSource implements MessageSource {
 
     const every = this.options.refreshMs ?? SIX_HOURS;
     if (every > 0) {
-      this.#timer = setInterval(() => {
-        void this.#refresh();
-      }, every);
+      this.#timer = setInterval(() => void this.#refresh(), every);
       // A background refresh should never be the reason the process stays up.
       this.#timer.unref();
     }
@@ -63,26 +54,30 @@ export class LiveSource implements MessageSource {
   }
 
   async #refresh(): Promise<void> {
-    const base = this.options.base ?? DEFAULT_BASE;
-    const section = this.options.section ?? DEFAULT_SECTION;
-    const scope = this.options.scope ?? DEFAULT_SCOPE;
     const log = (m: string) => {
       if (!this.options.quiet) console.log(m);
     };
 
     try {
-      log(`Reading ${base}${section} …`);
-      const seeds = await discoverFromSitemap(base, scope, log);
-      const pages = await crawlSection({ base, section, scope, seeds, onProgress: log });
-      const rules = await loadRules();
-      const { topics, kept } = buildTopics(pages, rules);
+      const manifest: Manifest = await loadManifest(this.options.manifestPath);
+      const fetched = await fetchDeclared(manifest, { onProgress: log });
+      const built = buildTopics(manifest, fetched);
 
-      if (kept === 0) throw new Error('crawl produced no messages');
+      if (built.kept === 0) throw new Error('no messages extracted from the declared pages');
 
-      this.#topics = topics;
+      // Replacing the array wholesale is what tells the catalog to rebuild.
+      this.#topics = built.topics;
       this.#updated = new Date().toISOString();
       this.#degraded = false;
-      log(`  ${kept} messages across ${topics.length} topics`);
+
+      const failed = built.outcomes.filter((o) => o.status !== 'ok');
+      log(`  ${built.kept} messages across ${built.topics.length} topics`);
+      if (failed.length > 0) {
+        // Named here too: a live boot has no summary to read afterwards.
+        console.warn(`  ${failed.length} page(s) did not extract cleanly:`);
+        for (const o of failed) console.warn(`    ${o.status.padEnd(11)} ${o.url}`);
+        console.warn('  Run "npm run check" for the full report.');
+      }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
 
@@ -92,8 +87,8 @@ export class LiveSource implements MessageSource {
         return;
       }
 
-      console.warn(`Could not read ${base}${section}: ${reason}`);
-      console.warn('Falling back to the built-in fixtures so the API still answers.');
+      console.warn(`Could not read the declared pages: ${reason}`);
+      console.warn('Falling back to the built-in fixtures so the API still boots.');
       const fixtures = new FixtureSource();
       await fixtures.load();
       this.#topics = fixtures.topics();

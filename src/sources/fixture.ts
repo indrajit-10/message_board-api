@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { MessageSource, Topic } from '../types.js';
+import type { MessageSource, Topic } from '../core/types.js';
 
 interface FixtureFile {
   generated_at: string;

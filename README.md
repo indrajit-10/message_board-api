@@ -8,9 +8,9 @@ hunts for something, copies it, comes back and pastes. This API removes that
 round trip: the message box's CTA sends the card's category and subcategory and
 gets back 5 messages the user can insert with one tap.
 
-Messages come from the blog via [`npm run ingest`](#getting-real-messages). Until
-that has been run, the API serves a small set of checked-in fixtures instead, so
-a fresh checkout still boots and the CTA still answers.
+Every message comes from our own blog, written by a person. Nothing here
+generates text, and the API refuses to serve the placeholder copy it ships with
+— see [Placeholders are never served](#placeholders-are-never-served).
 
 ## Quick start
 
@@ -26,6 +26,9 @@ Open <http://localhost:3000> for the demo page, or call it directly:
 curl "http://localhost:3000/v1/messages?category=birthday&subcategory=friends"
 ```
 
+A fresh checkout has no messages yet. Fill in
+[`src/ingest/manifest.json`](#the-manifest) and run `npm run ingest`.
+
 ## Pages
 
 | URL | What it is |
@@ -35,28 +38,7 @@ curl "http://localhost:3000/v1/messages?category=birthday&subcategory=friends"
 | `/browse` | Every message currently loaded, by topic, with search |
 
 All three are static files served by the API itself, so they call it
-same-origin with no build step. `/api` and `/browse` both show whether the
-messages are ingested or the built-in fixtures.
-
-
-## Demo page
-
-`http://localhost:3000` is a stand-in for a card-sending page: a message box
-with the CTA wired up, so you can see the feature rather than read about it.
-Pick a card with the preset chips or type any category, press **Get Messages**,
-and click a suggestion to drop it into the box.
-
-It is built to show the two behaviours that are easy to miss from the JSON:
-
-- The **quinceanera / cousin** preset is a category with no messages. Note that
-  the button still returns something usable and the panel says so, rather than
-  erroring.
-- **Show me 5 more** sends `exclude`, so a second press never repeats what is
-  already on screen.
-
-The page also prints the exact request it made, which makes it a quick way to
-check a category before wiring anything up. It is served by the API itself
-(`public/index.html`, static, no build step) so it can call it same-origin.
+same-origin with no build step.
 
 ## The contract
 
@@ -95,10 +77,12 @@ check a category before wiring anything up. It is served by the API itself
 `text` is plain text, always — it goes straight into a `<textarea>`, so it
 carries no markup or HTML entities.
 
+When nothing covers the card, `resolved` is `null`, `messages` is empty, and
+`unavailable_reason` says why. The app should hide the button.
+
 ### `GET /v1/categories`
 
-Coverage map: which card categories have dedicated messages, and how many.
-Use it to decide where writing more messages actually pays off.
+Coverage map: which card categories have messages, and how many.
 
 ### `GET /v1/health`
 
@@ -106,19 +90,18 @@ Source name, topic and message counts, last ingest timestamp.
 
 ### `GET /v1/topics/:id`
 
-One topic with **every** message in it, rather than a sample. For checking what
-an ingest actually produced.
+One topic with **every** message in it, rather than a sample.
 
 ### `GET /v1/search?q=`
 
 Free-text search across every message; each hit says which topic it came from.
 `limit` defaults to 100, max 500, and `truncated` says whether there were more.
 
-
 ## Two behaviours worth knowing
 
-**The CTA never fails.** The card taxonomy is much larger than the message
-coverage, so an unmatched card is normal, not an error. Resolution walks:
+**The CTA degrades, it doesn't fail.** The card taxonomy is much larger than the
+message coverage, so an unmatched card is normal, not an error. Resolution
+walks:
 
 ```
 birthday/friends   ->  exact      dedicated messages for this subcategory
@@ -127,8 +110,8 @@ birthday/*         ->  category   general messages for this category
 ```
 
 `resolved.match` reports which rung it landed on, so the UI can be honest —
-*"Birthday wishes for friends"* vs *"Wishes you can use for any card"* — without
-ever showing the user an empty box. An unknown category returns 200, not 404.
+*"Birthday wishes for friends"* vs *"Wishes you can use for any card"*. An
+unknown category returns 200, not 404.
 
 **Pressing the CTA again shows something new.** Selection is random, not
 paginated. Send the ids already on screen as `exclude` and they won't come back.
@@ -149,6 +132,7 @@ async function getMessages({ category, subcategory }) {
   const res = await fetch(`${API_BASE}/v1/messages?${params}`);
   const data = await res.json();
 
+  if (!data.resolved) return null;   // nothing covers this card; hide the button
   seen = data.wrapped ? [] : [...seen, ...data.messages.map((m) => m.id)];
   return data;
 }
@@ -157,179 +141,191 @@ async function getMessages({ category, subcategory }) {
 Render `data.messages`; on tap, insert `message.text` into the message box.
 Label the list from `data.resolved.label`.
 
-## Getting real messages
+## The manifest
 
-Two ways to get them. Pick one.
+`src/ingest/manifest.json` is the whole configuration of what gets read. It
+maps our own blog's pages onto card categories:
 
-**Without an ingest step** — the server reads the blog itself at startup:
-
-```bash
-npm run dev:live
+```json
+{
+  "base": "https://blog.123greetings.com",
+  "defaults": {
+    "selector": ".entry-content li, .entry-content blockquote",
+    "minLength": 15,
+    "maxLength": 400
+  },
+  "topics": [
+    {
+      "id": "birthday-friends",
+      "label": "Birthday wishes for friends",
+      "serves": ["birthday/friends", "birthday/best_friend"],
+      "pages": [
+        "/what-to-write-in-a-card/birthday/for-friends/",
+        { "url": "/birthday-messages-for-friends/", "selector": ".msg-list li" }
+      ]
+    }
+  ]
+}
 ```
 
-Nothing else to run and no data file. The first boot takes a few seconds while
-it crawls, after which requests are served from memory in single-digit
-milliseconds, and it re-reads the blog every six hours. If the blog cannot be
-reached it says so and uses the fixtures, so the API still answers.
+| Field | Meaning |
+|---|---|
+| `base` | The host. Every `pages` entry resolves against it, and a page on another host is refused |
+| `defaults.selector` | CSS selector holding the messages, when a page doesn't override it |
+| `defaults.minLength` / `maxLength` | Length window for a single message |
+| `topics[].id` | Topic id, and the prefix of every message id it produces |
+| `topics[].label` | What the UI calls this list |
+| `topics[].serves` | Card patterns: `category/subcategory`, `category/*`, or `*` |
+| `topics[].pages` | Blog pages to read. A path string, or `{ url, selector }` |
+| `topics[].find` | Keywords used *only* by `npm run suggest`. Never read during ingest |
 
-**With an ingest step** — crawl once, write a store, serve that:
+Several topics may list the same page — it is fetched once and feeds each of
+them. A topic with no pages is allowed; it simply serves nothing until you add
+some, and every run says which topics those are.
+
+The manifest is validated on load. A `serves` pattern the taxonomy could never
+match, a duplicate topic id, a cross-host URL and a backwards length window are
+all rejected by name and line, rather than becoming a topic that silently
+answers nothing.
+
+### Why declared rather than discovered
+
+This is our site, so the code doesn't guess at it. Earlier versions crawled the
+section tree, read sitemaps, ran four extraction strategies and voted on the
+winner, then matched posts to categories with 152 keywords. All of that existed
+to answer "what does this website do?" — a question we can answer directly.
+
+The practical difference is failure. Guessing degrades quietly: a theme change
+drops the message count and nothing errors. Declaring fails loudly: the page is
+named, the topic it fed is named, and the fix is a line in this file.
+
+## Getting messages
+
+**With an ingest step** — read the declared pages once, write a store, serve it:
 
 ```bash
-npm run probe                          # what does the blog expose?
-npm run ingest -- --dry-run --verbose  # what would be extracted, without writing
-npm run ingest -- --reset              # wipe the store and rebuild it
+npm run check      # read everything, report, write nothing
+npm run ingest     # same, but write data/topics.json
 npm run dev
 ```
 
-More to remember, but the messages are a file you can read, diff and roll back,
-boot is instant, and a blog outage cannot affect a restart. Prefer this once
-it is running somewhere real; `dev:live` is the shorter path while you are
-still looking at what comes out.
-
-Restart the API and it serves the store automatically — `/v1/health` will say
-`"source": "store"` with the ingest timestamp.
-
-Ingest runs on a schedule, never per request. A CTA that scrapes live is slow
-enough to feel broken, breaks whenever the blog does, and turns every card
-sender into traffic on the blog. Reading a local store is a few milliseconds and
-stays up regardless.
+The messages are then a file you can read, diff and roll back, boot is instant,
+and a blog outage cannot affect a restart. Ingest runs on a schedule, never per
+request — a CTA that scrapes live is slow enough to feel broken, breaks whenever
+the blog does, and turns every card sender into traffic on the blog.
 
 ```
 client ──▶ this API ──▶ data/topics.json ◀── npm run ingest ◀── blog
 ```
 
-### What gets crawled
+**Without an ingest step** — the server reads the pages itself at startup:
 
-### Where it starts vs what it may reach
+```bash
+npm run dev:live
+```
 
-`--section` is where the crawl **begins**; `--scope` is what it is **allowed to
-reach**, and defaults to the whole host.
+No data file, and it re-reads every six hours. Boot is slower and messages are
+only as fresh as the last refresh. A request still never waits on the blog. If
+the pages cannot be read it falls back to placeholders, `/v1/health` reports
+`degraded: true`, and the API serves nothing.
 
-They are separate because the section index is a hub: it links out to message
-pages that live at the site root — `/birthday-messages/`,
-`/messages-for-1st-birthday/` — not beneath its own path. Using the hub as the
-boundary follows none of them and comes back with the hub and little else.
+### Filling in the manifest
 
-Narrow it with `--scope /what-to-write-in-a-card/` if you only want that subtree.
-Pages outside it that turn out not to be message pages simply yield nothing and
-are listed in the summary.
+`npm run suggest` reads the blog's sitemap and proposes URLs per topic, using
+the `find` keywords, for you to review and paste into `pages`:
 
-By default ingest takes `/what-to-write-in-a-card/` and **everything beneath
-it** — `/birthday/`, `/birthday/for-mom/`, `/anniversary/` and so on. Whether
-those pages are WordPress posts, pages or hand-built HTML is not knowable from
-outside, and the posts API only ever sees one of the three, so it reads the
-pages themselves.
+```bash
+npm run suggest           # topics with no pages yet
+npm run suggest -- --all  # every topic
+```
 
-It finds them two ways at once. The sitemap (`/wp-sitemap.xml`, `/sitemap.xml`,
-or whatever `robots.txt` points at) is the site's own list of everything it
-has, including pages nothing links to. Following links then catches anything
-the sitemap left out. Either alone misses pages; together they do not.
-
-Crawling stays inside the section: another host, a path above the section, and
-assets are all skipped, and `/birthday` and `/birthday/` are the same page.
-
-The path is also the taxonomy. `/what-to-write-in-a-card/birthday/for-mom/`
-carries the segments `birthday` and `for-mom`, which is what the mapping rules
-read — far steadier than guessing from a slug.
-
-`--transport wp-json` switches to the REST API instead, falling back to the
-feed. Use it if the section ever stops being crawlable; the summary always
-prints which transport ran.
-
-### Start with the probe
-
-`npm run probe` reports what the host actually serves — `robots.txt`, whether
-`wp-json` and the feed respond, every blog category with post counts, and the
-tag structure of a sample post. Run it before the first ingest, and again if
-extraction quality drops: a theme change shows up here first.
+It only ever prints suggestions. A matching URL is not proof the page holds card
+messages, so nothing is written for you.
 
 ### Flags
+
+Both `ingest` and `check` take:
 
 | Flag | Effect |
 |---|---|
 | `--dry-run` | Report what would be extracted, write nothing |
+| `--strict` | Exit non-zero if any page did not extract cleanly. For CI |
 | `--verbose` | Also print a sample of the kept messages |
 | `--reset` | Delete the store first, so nothing from a previous run survives |
-| `--section <path>` | Where to start, default `/what-to-write-in-a-card/` |
-| `--scope <path>` | What the crawl may reach, default `/` (the whole host) |
-| `--transport wp-json` | Use the REST API instead of crawling |
-| `--category <slug>` | With `--transport wp-json`, restrict to one blog category |
-| `--limit <n>` | Stop after n pages |
-| `--min-length <n>` | Shortest text kept as a message, default 15 |
-| `--max-length <n>` | Longest, default 400 |
-| `--base <url>` | Point at a different host |
+| `--topic <id>` | Only this topic, for iterating on one selector |
+| `--base <url>` | Point every page at a different host, e.g. staging |
+| `--manifest <path>` | Use a different manifest |
 | `--out <path>` | Write somewhere other than `data/topics.json` |
+| `--delay <ms>` | Gap between requests, default 250 |
+
+`npm run check` is `--dry-run --strict`. Run it on a schedule: it is what turns
+"the blog's markup moved" into a red build instead of a shrinking store.
 
 ### Reading the summary
 
 ```
-transport   wp-json
-posts       6
-markup      list=3  paragraph=1  blockquote=1  linebreak=1
-extracted   16 messages
-kept        13 after dedupe
+pages       12 declared
+            9 ok
+            2 FALLBACK — declared selector found nothing
+            1 UNREACHABLE
+extracted   184 messages
+kept        152 after dedupe
+rejected    too_short=41  boilerplate=18
 
-Topics (5):
-      8  everyday             *
-      6  birthday-friends     birthday/friends birthday/best_friend
-      3  thank-you            thank_you/* thanks/*
+Topics (8 of 42 have messages):
+     38  birthday-general       birthday/* *
+     22  birthday-friends       birthday/friends birthday/best_friend
 
-1 post had messages but no card mapping:
-  ten-tips-for-picking-a-card
-  Add rules to src/ingest/rules.json to bring these in.
+2 pages fell back to guessing the markup:
+  https://blog.123greetings.com/birthday-messages/
+      salvaged 14 via list, for birthday-general
+  Fix: give these pages a "selector" in the manifest, or update defaults.selector.
 ```
 
-Four lines are worth acting on:
+Four things are worth acting on:
 
-- **`markup`** — which HTML shape each post used. Posts do not agree on how to
-  mark up a list of wishes, so every strategy runs and the one yielding the most
-  usable messages wins. A sudden shift toward `none` means the theme changed.
-- **posts that yielded no messages** — either not message posts, or markup
-  `extract.ts` does not read yet.
-- **posts with no card mapping** — real messages that no card category claims.
-  This is the list that tells you which rules to write next.
+- **`FALLBACK`** — the declared selector matched nothing and the old guess-work
+  salvaged the page. It still contributed messages, but the manifest is now
+  wrong. This is the line that used to be invisible.
+- **`UNREACHABLE`** — the page 404'd, timed out or returned non-HTML.
+- **`EMPTY`** — read fine, no messages found. Either not a message page, or
+  markup `extract.ts` does not read.
 - **`rejected`** — what the filters threw away and why. `too_short` in the
-  thousands means the length floor is wrong for this site; `boilerplate` in the
-  thousands means it is working. This is where a message going missing shows up.
+  thousands means the length window is wrong for this site; `boilerplate` in the
+  thousands means it is working.
 
-Nothing is dropped silently; anything skipped is named.
-
-### Extending coverage
-
-`src/ingest/rules.json` maps posts onto card categories. First matching rule
-wins, so specific rules come before general ones. `all` keywords must every one
-appear in the post's slug, title or blog categories; `any` needs at least one.
-
-```json
-{
-  "id": "birthday-friends",
-  "label": "Birthday wishes for friends",
-  "serves": ["birthday/friends", "birthday/best_friend"],
-  "all": ["birthday"],
-  "any": ["friend", "bestie"]
-}
-```
-
-Widening coverage is a data edit, not a release.
+Nothing is dropped silently; anything skipped is named, with the fix.
 
 If extraction picks up junk or misses real messages, the filters are in
 `src/ingest/extract.ts` — `BOILERPLATE` for navigation and calls to action,
 `rejectReason` for length, links, headings and enumeration.
 
-### Sources
+## Sources
 
 | `MESSAGE_SOURCE` | Behaviour |
 |---|---|
-| `auto` (default) | Ingested store if `data/topics.json` exists, else fixtures |
-| `live` | Read the blog at startup, no store file (`npm run dev:live`) |
+| `auto` (default) | Ingested store if it exists, else placeholders |
+| `live` | Read the declared pages at startup, no store file (`npm run dev:live`) |
 | `store` | Ingested store only; fails to boot if it is missing |
-| `fixture` | Checked-in fixtures only |
+| `fixture` | Placeholders only |
 
-`data/` is gitignored — regenerate it, do not commit it.
+`MESSAGE_STORE_PATH` overrides where the store is read from, for deploys that
+mount it outside the repo. `data/` is gitignored — regenerate it, do not commit
+it.
 
-If ingest produces no topic serving `*`, the fixture fallback is kept and the
-run says so. Without a global fallback the API cannot answer for an uncovered
-card, which is precisely the case the CTA exists to handle.
+### Placeholders are never served
+
+The repo ships a small set of placeholder messages so a fresh checkout boots and
+the pages render. They are written by us, and the API will not hand them to a
+user: they are loaded, marked `origin: "placeholder"`, and filtered out of every
+read path — messages, search, categories and the topic view alike.
+
+The whole value of this feature is that a person wrote the words, so a message
+we wrote is worse than no message. `/v1/health` reports `placeholder_messages`
+so a leak would be visible, and it should be `0` in production.
+
+That is why a fresh checkout answers with an empty list until you have run an
+ingest. It is working as intended.
 
 ## Layout
 
@@ -339,28 +335,34 @@ public/
   api.html           API explorer
   browse.html        message browser
 src/
-  app.ts             routes + validation
-  taxonomy.ts        slug normalisation, fallback chain, stable message ids
-  selection.ts       random pick, exclude, wrap-around
-  types.ts           Message, Topic, MessageSource
-  sources/
-    fixture.ts       checked-in fallback messages
+  index.ts           boot: pick a source, start the server
+  core/              the domain, no HTTP and no network
+    types.ts         Message, Topic, MessageSource
+    taxonomy.ts      slug normalisation, the fallback chain, stable message ids
+    selection.ts     random pick, exclude, wrap-around
+    catalog.ts       one derived, indexed view of the loaded topics
+  http/              the API surface
+    createApp.ts     assembly
+    context.ts       what routes are given
+    params.ts        query parsing and validation
+    respond.ts       errors and cache headers
+    routes/          messages, catalog, search, health
+  sources/           where topics come from
+    fixture.ts       checked-in placeholders
     store.ts         ingested messages
-    live.ts          reads the blog at startup, no store file
-    fixtures/        the fallback messages
+    live.ts          reads the declared pages at startup, no store file
   ingest/
-    probe.ts         what does the blog expose?
-    crawl.ts         walks the section URL tree
-    sitemap.ts       finds pages the navigation does not link to
-    fetchPosts.ts    wp-json, falling back to the feed
-    extract.ts       post HTML -> individual messages
-    mapping.ts       post -> card categories
-    rules.json       the mapping, as data
+    manifest.json    which pages, for which topics — the whole configuration
+    manifest.ts      load and validate it
+    collect.ts       fetch exactly the declared pages
+    fetch.ts         one polite GET
+    extract.ts       page HTML -> individual messages
+    build.ts         pages -> topics, plus what went wrong
     run.ts           the ingest CLI
-  api.test.ts
-  ingest/ingest.test.ts
+    suggest.ts       propose URLs from the sitemap, for filling in the manifest
+    sitemap.ts       what the site says it has (only used by suggest)
 ```
 
-Fixture copy is original placeholder text, not blog content. It exists so the
-API answers before the first ingest, and as the global fallback if ingest does
-not produce one.
+`core/` knows nothing about Express, and `http/` knows nothing about where
+messages came from. `catalog.ts` is where placeholder filtering, message ids and
+the search index are derived — once per load, not once per request.

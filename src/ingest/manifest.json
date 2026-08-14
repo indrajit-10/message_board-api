@@ -1,0 +1,754 @@
+{
+  "base": "https://blog.123greetings.com",
+  "defaults": {
+    "selector": ".entry-content li, .entry-content blockquote",
+    "minLength": 15,
+    "maxLength": 400
+  },
+  "topics": [
+    {
+      "id": "birthday-friends",
+      "label": "Birthday wishes for friends",
+      "serves": [
+        "birthday/friends",
+        "birthday/best_friend",
+        "birthday/friendship"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "friend",
+          "bestie",
+          "buddy",
+          "pal"
+        ]
+      }
+    },
+    {
+      "id": "birthday-work",
+      "label": "Birthday wishes for colleagues",
+      "serves": [
+        "birthday/boss",
+        "birthday/colleague",
+        "birthday/coworker"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "boss",
+          "colleague",
+          "coworker",
+          "co-worker",
+          "employee",
+          "team"
+        ]
+      }
+    },
+    {
+      "id": "birthday-grandmother",
+      "label": "Birthday wishes for grandmother",
+      "serves": [
+        "birthday/grandma",
+        "birthday/grandmother",
+        "birthday/nana"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "grandma",
+          "grandmother",
+          "granny",
+          "nana",
+          "grandmom"
+        ]
+      }
+    },
+    {
+      "id": "birthday-grandfather",
+      "label": "Birthday wishes for grandfather",
+      "serves": [
+        "birthday/grandpa",
+        "birthday/grandfather"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "grandpa",
+          "grandfather",
+          "grandad",
+          "granddad",
+          "grandad"
+        ]
+      }
+    },
+    {
+      "id": "birthday-mom",
+      "label": "Birthday wishes for mom",
+      "serves": [
+        "birthday/mom",
+        "birthday/mother",
+        "birthday/mum"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "mom",
+          "mum",
+          "mother",
+          "mommy",
+          "mummy",
+          "mama"
+        ]
+      }
+    },
+    {
+      "id": "birthday-dad",
+      "label": "Birthday wishes for dad",
+      "serves": [
+        "birthday/dad",
+        "birthday/father"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "dad",
+          "father",
+          "papa",
+          "daddy"
+        ]
+      }
+    },
+    {
+      "id": "birthday-sister",
+      "label": "Birthday wishes for sister",
+      "serves": [
+        "birthday/sister"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "sister",
+          "sis"
+        ]
+      }
+    },
+    {
+      "id": "birthday-brother",
+      "label": "Birthday wishes for brother",
+      "serves": [
+        "birthday/brother"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "brother",
+          "bro"
+        ]
+      }
+    },
+    {
+      "id": "birthday-daughter",
+      "label": "Birthday wishes for daughter",
+      "serves": [
+        "birthday/daughter"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "daughter"
+        ]
+      }
+    },
+    {
+      "id": "birthday-son",
+      "label": "Birthday wishes for son",
+      "serves": [
+        "birthday/son"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "son"
+        ]
+      }
+    },
+    {
+      "id": "birthday-wife",
+      "label": "Birthday wishes for wife",
+      "serves": [
+        "birthday/wife"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "wife"
+        ]
+      }
+    },
+    {
+      "id": "birthday-husband",
+      "label": "Birthday wishes for husband",
+      "serves": [
+        "birthday/husband"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "husband"
+        ]
+      }
+    },
+    {
+      "id": "birthday-girlfriend",
+      "label": "Birthday wishes for girlfriend",
+      "serves": [
+        "birthday/girlfriend"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "girlfriend"
+        ]
+      }
+    },
+    {
+      "id": "birthday-boyfriend",
+      "label": "Birthday wishes for boyfriend",
+      "serves": [
+        "birthday/boyfriend"
+      ],
+      "pages": [],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "boyfriend"
+        ]
+      }
+    },
+    {
+      "id": "birthday-first",
+      "label": "First birthday messages",
+      "serves": [
+        "birthday/1st_birthday",
+        "birthday/first_birthday",
+        "birthday/baby"
+      ],
+      "pages": [
+        "/messages-for-1st-birthday/"
+      ],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": [
+          "1st birthday",
+          "first birthday",
+          "1st bday",
+          "one year old",
+          "turning one"
+        ]
+      }
+    },
+    {
+      "id": "birthday-general",
+      "label": "Birthday wishes",
+      "serves": [
+        "birthday/*"
+      ],
+      "pages": [
+        "/what-to-write-in-a-card/",
+        "/birthday-messages/"
+      ],
+      "find": {
+        "all": [
+          "birthday"
+        ],
+        "any": []
+      }
+    },
+    {
+      "id": "anniversary",
+      "label": "Anniversary wishes",
+      "serves": [
+        "anniversary/*",
+        "wedding/anniversary"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "anniversary"
+        ]
+      }
+    },
+    {
+      "id": "wedding",
+      "label": "Wedding wishes",
+      "serves": [
+        "wedding/*",
+        "marriage/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "wedding",
+          "marriage",
+          "newlywed",
+          "bride",
+          "groom"
+        ]
+      }
+    },
+    {
+      "id": "thank-you",
+      "label": "Thank you messages",
+      "serves": [
+        "thank_you/*",
+        "thanks/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "thank you",
+          "thank-you",
+          "thankyou",
+          "gratitude",
+          "appreciation"
+        ]
+      }
+    },
+    {
+      "id": "get-well",
+      "label": "Get well soon messages",
+      "serves": [
+        "get_well/*",
+        "get_well_soon/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "get well",
+          "feel better",
+          "recovery",
+          "recover soon"
+        ]
+      }
+    },
+    {
+      "id": "sympathy",
+      "label": "Sympathy messages",
+      "serves": [
+        "sympathy/*",
+        "condolence/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "sympathy",
+          "condolence",
+          "bereavement",
+          "funeral",
+          "grief",
+          "passing"
+        ]
+      }
+    },
+    {
+      "id": "congratulations",
+      "label": "Congratulations messages",
+      "serves": [
+        "congratulations/*",
+        "congrats/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "congratulation",
+          "congrats",
+          "promotion",
+          "new job",
+          "achievement",
+          "well done"
+        ]
+      }
+    },
+    {
+      "id": "graduation",
+      "label": "Graduation messages",
+      "serves": [
+        "graduation/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "graduation",
+          "graduate",
+          "convocation"
+        ]
+      }
+    },
+    {
+      "id": "new-baby",
+      "label": "New baby messages",
+      "serves": [
+        "new_baby/*",
+        "baby/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "new baby",
+          "newborn",
+          "baby shower",
+          "christening",
+          "new arrival"
+        ]
+      }
+    },
+    {
+      "id": "love",
+      "label": "Love and romance messages",
+      "serves": [
+        "love/*",
+        "romance/*",
+        "valentines_day/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "love",
+          "romance",
+          "romantic",
+          "valentine"
+        ]
+      }
+    },
+    {
+      "id": "friendship",
+      "label": "Friendship messages",
+      "serves": [
+        "friendship/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "friendship",
+          "friends day"
+        ]
+      }
+    },
+    {
+      "id": "good-luck",
+      "label": "Good luck messages",
+      "serves": [
+        "good_luck/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "good luck",
+          "best of luck",
+          "all the best"
+        ]
+      }
+    },
+    {
+      "id": "retirement",
+      "label": "Retirement messages",
+      "serves": [
+        "retirement/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "retirement",
+          "retiring",
+          "retire"
+        ]
+      }
+    },
+    {
+      "id": "christmas",
+      "label": "Christmas messages",
+      "serves": [
+        "christmas/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "christmas",
+          "xmas",
+          "yuletide"
+        ]
+      }
+    },
+    {
+      "id": "new-year",
+      "label": "New Year messages",
+      "serves": [
+        "new_year/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "new year"
+        ]
+      }
+    },
+    {
+      "id": "mothers-day",
+      "label": "Mother's Day messages",
+      "serves": [
+        "mothers_day/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "mother's day",
+          "mothers day"
+        ]
+      }
+    },
+    {
+      "id": "fathers-day",
+      "label": "Father's Day messages",
+      "serves": [
+        "fathers_day/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "father's day",
+          "fathers day"
+        ]
+      }
+    },
+    {
+      "id": "easter",
+      "label": "Easter messages",
+      "serves": [
+        "easter/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "easter"
+        ]
+      }
+    },
+    {
+      "id": "thanksgiving",
+      "label": "Thanksgiving messages",
+      "serves": [
+        "thanksgiving/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "thanksgiving"
+        ]
+      }
+    },
+    {
+      "id": "sorry",
+      "label": "Sorry and apology messages",
+      "serves": [
+        "sorry/*",
+        "apology/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "sorry",
+          "apology",
+          "apologise",
+          "apologize",
+          "forgive me"
+        ]
+      }
+    },
+    {
+      "id": "miss-you",
+      "label": "Miss you messages",
+      "serves": [
+        "miss_you/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "miss you",
+          "missing you"
+        ]
+      }
+    },
+    {
+      "id": "good-morning",
+      "label": "Good morning and good night messages",
+      "serves": [
+        "good_morning/*",
+        "good_night/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "good morning",
+          "good night",
+          "good evening"
+        ]
+      }
+    },
+    {
+      "id": "encouragement",
+      "label": "Encouragement messages",
+      "serves": [
+        "encouragement/*",
+        "cheer_up/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "encouragement",
+          "encouraging",
+          "cheer up",
+          "hang in there",
+          "you can do it"
+        ]
+      }
+    },
+    {
+      "id": "farewell",
+      "label": "Farewell messages",
+      "serves": [
+        "farewell/*",
+        "goodbye/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "farewell",
+          "goodbye",
+          "bon voyage",
+          "safe travels"
+        ]
+      }
+    },
+    {
+      "id": "new-home",
+      "label": "New home messages",
+      "serves": [
+        "new_home/*",
+        "housewarming/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "new home",
+          "housewarming",
+          "moving house"
+        ]
+      }
+    },
+    {
+      "id": "welcome",
+      "label": "Welcome messages",
+      "serves": [
+        "welcome/*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "welcome"
+        ]
+      }
+    },
+    {
+      "id": "everyday",
+      "label": "Messages for any card",
+      "serves": [
+        "*"
+      ],
+      "pages": [],
+      "find": {
+        "all": [],
+        "any": [
+          "everyday",
+          "every day",
+          "general message",
+          "thinking of you",
+          "just because",
+          "any occasion",
+          "all occasions",
+          "keep in touch",
+          "have a great day",
+          "have a nice day",
+          "hello"
+        ]
+      }
+    }
+  ]
+}

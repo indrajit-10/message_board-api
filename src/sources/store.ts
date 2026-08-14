@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import type { MessageSource, Topic } from '../types.js';
+import type { MessageSource, Topic } from '../core/types.js';
 
 interface StoreFile {
   generated_at: string;

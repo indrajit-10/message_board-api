@@ -1,4 +1,4 @@
-import { createApp } from './app.js';
+import { createApp } from './http/createApp.js';
 import { createSource } from './sources/index.js';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -17,7 +17,7 @@ const rule = '─'.repeat(64);
  * Serving placeholders looks exactly like serving the blog unless something
  * says otherwise: the API answers, the pages render, the counts are just
  * lower. Announcing it at startup is the difference between noticing in
- * seconds and assuming the crawl worked.
+ * seconds and assuming the ingest worked.
  */
 function announce(): void {
   console.log(rule);
@@ -28,10 +28,11 @@ function announce(): void {
     console.log(`  PLACEHOLDERS — ${messages} built-in messages. The blog has NOT been read.`);
     console.log();
     console.log('  To read the blog instead, stop this (Ctrl+C) and run:');
-    console.log('      npm run dev:live');
+    console.log('      npm run ingest      then      npm run dev');
+    console.log('  or  npm run dev:live    to read it at startup with no store file');
   } else {
-    console.log(`  PLACEHOLDERS — reading the blog failed, see the error above.`);
-    console.log(`  Serving ${messages} built-in messages so the API still answers.`);
+    console.log('  PLACEHOLDERS — reading the blog failed, see the error above.');
+    console.log(`  Serving ${messages} built-in messages so the API still boots.`);
   }
   console.log(rule);
 }

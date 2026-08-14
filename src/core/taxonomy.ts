@@ -15,18 +15,22 @@ export function normaliseSlug(value: string): string {
     .replace(/[^a-z0-9_]/g, '');
 }
 
+export function normalisePattern(pattern: string): string {
+  if (pattern === '*') return '*';
+  const [cat = '', sub = ''] = pattern.split('/');
+  return sub === '*' ? `${normaliseSlug(cat)}/*` : `${normaliseSlug(cat)}/${normaliseSlug(sub)}`;
+}
+
 /**
- * Pick the topic that best covers a card's category/subcategory.
+ * The patterns a request could be answered by, most specific first.
  *
- * Tries exact match, then category-wide, then the global pool. Returns null
- * only if the source has no global fallback topic at all, which is a data
- * problem rather than a request problem.
+ * Exposed so the catalog can index on exactly these keys — resolution is then
+ * a map lookup rather than a scan over every topic's `serves`.
  */
-export function resolveTopic(
-  topics: Topic[],
+export function resolutionOrder(
   category: string,
   subcategory: string | undefined,
-): Resolution | null {
+): Array<{ pattern: string; match: MatchKind }> {
   const cat = normaliseSlug(category);
   const sub = subcategory ? normaliseSlug(subcategory) : '';
 
@@ -34,18 +38,26 @@ export function resolveTopic(
   if (cat && sub) attempts.push({ pattern: `${cat}/${sub}`, match: 'exact' });
   if (cat) attempts.push({ pattern: `${cat}/*`, match: 'category' });
   attempts.push({ pattern: '*', match: 'generic' });
+  return attempts;
+}
 
-  for (const attempt of attempts) {
+/**
+ * Pick the topic that best covers a card's category/subcategory.
+ *
+ * Tries exact match, then category-wide, then the global pool. Returns null
+ * only when nothing covers the card at all — including the global fallback,
+ * which means the loaded messages cannot answer for an uncovered card.
+ */
+export function resolveTopic(
+  topics: Topic[],
+  category: string,
+  subcategory: string | undefined,
+): Resolution | null {
+  for (const attempt of resolutionOrder(category, subcategory)) {
     const topic = topics.find((t) => t.serves.some((p) => normalisePattern(p) === attempt.pattern));
     if (topic) return { topic, match: attempt.match };
   }
   return null;
-}
-
-function normalisePattern(pattern: string): string {
-  if (pattern === '*') return '*';
-  const [cat = '', sub = ''] = pattern.split('/');
-  return sub === '*' ? `${normaliseSlug(cat)}/*` : `${normaliseSlug(cat)}/${normaliseSlug(sub)}`;
 }
 
 /**

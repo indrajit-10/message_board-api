@@ -1,13 +1,21 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { MessageSource } from '../types.js';
+import type { MessageSource } from '../core/types.js';
 import { FixtureSource } from './fixture.js';
 import { LiveSource } from './live.js';
 import { StoreSource } from './store.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const STORE_PATH = join(ROOT, 'data', 'topics.json');
+
+/**
+ * Where the ingested store lives.
+ *
+ * Overridable because the store is a deploy artefact: a container image will
+ * usually mount it somewhere other than the repo, and `--out` on the ingest
+ * side is only half of that if the server can only ever read one path.
+ */
+export const STORE_PATH = process.env.MESSAGE_STORE_PATH ?? join(ROOT, 'data', 'topics.json');
 
 /**
  * Chooses the backing source.
