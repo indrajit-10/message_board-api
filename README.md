@@ -231,16 +231,41 @@ the pages cannot be read it falls back to placeholders, `/v1/health` reports
 
 ### Filling in the manifest
 
-`npm run suggest` reads the blog's sitemap and proposes URLs per topic, using
-the `find` keywords, for you to review and paste into `pages`:
+`npm run suggest` reads the blog's sitemap and proposes URLs per topic, matching
+the `find` keywords against each URL path:
 
 ```bash
-npm run suggest           # topics with no pages yet
-npm run suggest -- --all  # every topic
+npm run suggest             # print suggestions for topics with no pages yet
+npm run suggest -- --write  # put them in the manifest
+npm run suggest -- --all    # include topics that already have pages
 ```
 
-It only ever prints suggestions. A matching URL is not proof the page holds card
-messages, so nothing is written for you.
+Without `--write` it only prints. Keywords match whole words, so
+`/birthday-wishes-for-grandmother/` does not answer for the `mom` topic, and the
+shortest matching path sorts first — `/birthday-messages/` ahead of
+`/birthday-messages-for-dad/` for the general topic.
+
+**A matching URL is not proof the page holds card messages.** After `--write`,
+always run `npm run check -- --verbose` and read what each page actually
+produced before serving any of it.
+
+If the host is unreachable from where you are running this — a locked-down CI
+box, an egress policy — save the sitemap and pass it in instead:
+
+```bash
+npm run suggest -- --from ./sitemap_index.xml
+```
+
+`--from` takes a sitemap (index or urlset) or a plain list of URLs, one per
+line, and repeats. A sitemap index only lists other sitemaps, so it reports
+those and asks you to save them too rather than coming back empty:
+
+```
+These are sitemap indexes listing 6 more sitemap(s).
+Save each of these and pass them too, with another --from:
+  https://blog.123greetings.com/post-sitemap.xml
+  https://blog.123greetings.com/page-sitemap.xml
+```
 
 ### Flags
 
